@@ -1,0 +1,23 @@
+# Server
+server/piliminusb.exe
+server/config.json
+
+# Go
+server/vendor/
+
+# Flutter / Dart
+PiliMinusB/.dart_tool/
+PiliMinusB/.packages
+PiliMinusB/build/
+PiliMinusB/.flutter-plugins
+PiliMinusB/.flutter-plugins-dependencies
+PiliMinusB/.metadata
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
