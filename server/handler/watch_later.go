@@ -170,34 +170,27 @@ func MediaList(c *gin.Context) {
 
 	query := database.DB.Where("user_id = ?", userID)
 
-	// Cursor-based pagination using oid (aid of boundary item)
-	if oidStr != "" {
+	// Cursor-based pagination using oid (aid of boundary item).
+	// When with_current=true this is the initial load — return all items
+	// from the beginning (oid just marks the current video, not a filter).
+	if oidStr != "" && !withCurrent {
 		oid, err := strconv.ParseInt(oidStr, 10, 64)
 		if err == nil && oid > 0 {
-			// Find the added_at of the cursor item
 			var cursor model.WatchLater
 			if err := database.DB.Where("user_id = ? AND aid = ?", userID, oid).First(&cursor).Error; err == nil {
 				if direction {
-					// Load previous (items added after the cursor in desc order)
+					// Load previous
 					if desc {
 						query = query.Where("added_at > ?", cursor.AddedAt)
 					} else {
 						query = query.Where("added_at < ?", cursor.AddedAt)
 					}
 				} else {
-					// Load next
-					if withCurrent {
-						if desc {
-							query = query.Where("added_at <= ?", cursor.AddedAt)
-						} else {
-							query = query.Where("added_at >= ?", cursor.AddedAt)
-						}
+					// Load next (with_current is always false here)
+					if desc {
+						query = query.Where("added_at < ?", cursor.AddedAt)
 					} else {
-						if desc {
-							query = query.Where("added_at < ?", cursor.AddedAt)
-						} else {
-							query = query.Where("added_at > ?", cursor.AddedAt)
-						}
+						query = query.Where("added_at > ?", cursor.AddedAt)
 					}
 				}
 			}
@@ -208,10 +201,19 @@ func MediaList(c *gin.Context) {
 	var totalCount int64
 	database.DB.Where("user_id = ?", userID).Model(&model.WatchLater{}).Count(&totalCount)
 
-	// Order
+	// Order: for normal loads use the requested sort order.
+	// For direction=true (load previous), reverse the sort so we fetch items
+	// closest to the cursor, then reverse the results back before returning.
 	order := "added_at DESC"
 	if !desc {
 		order = "added_at ASC"
+	}
+	if direction {
+		if desc {
+			order = "added_at ASC"
+		} else {
+			order = "added_at DESC"
+		}
 	}
 
 	var items []model.WatchLater
@@ -220,6 +222,13 @@ func MediaList(c *gin.Context) {
 	hasMore := len(items) > ps
 	if hasMore {
 		items = items[:ps]
+	}
+
+	// Reverse results back to original order so client can prepend directly.
+	if direction {
+		for i, j := 0, len(items)-1; i < j; i, j = i+1, j-1 {
+			items[i], items[j] = items[j], items[i]
+		}
 	}
 
 	mediaList := make([]map[string]interface{}, 0, len(items))
