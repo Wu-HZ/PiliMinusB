@@ -108,6 +108,56 @@ class SelfRequest {
     }
   }
 
+  /// Login to self-hosted server. Returns `{'status': true, 'msg': '...'}` on
+  /// success or `{'status': false, 'msg': '...'}` on failure.
+  ///
+  /// Server response format: `{"code":0,"message":"success","data":{"token":"..."}}`
+  static Future<Map<String, dynamic>> login(
+      String username, String password) async {
+    try {
+      final resp = await dio.post('/auth/login', data: {
+        'username': username,
+        'password': password,
+      });
+      final body = resp.data;
+      final inner = body is Map ? body['data'] : null;
+      if (inner is Map && inner['token'] != null) {
+        setToken(inner['token'] as String);
+        return {'status': true, 'msg': '登录成功'};
+      }
+      return {'status': false, 'msg': body?['message'] ?? '登录失败'};
+    } on DioException catch (e) {
+      final msg = e.response?.data is Map
+          ? (e.response!.data as Map)['message'] ?? e.message
+          : e.message ?? '网络错误';
+      return {'status': false, 'msg': msg};
+    }
+  }
+
+  /// Register on self-hosted server.
+  ///
+  /// Server response format: `{"code":0,"message":"success","data":{"id":...,"username":"..."}}`
+  /// Register does NOT return a token — user must login after registering.
+  static Future<Map<String, dynamic>> register(
+      String username, String password) async {
+    try {
+      final resp = await dio.post('/auth/register', data: {
+        'username': username,
+        'password': password,
+      });
+      final body = resp.data;
+      return {
+        'status': body is Map && body['code'] == 0,
+        'msg': body?['message'] ?? '注册成功，请登录',
+      };
+    } on DioException catch (e) {
+      final msg = e.response?.data is Map
+          ? (e.response!.data as Map)['message'] ?? e.message
+          : e.message ?? '网络错误';
+      return {'status': false, 'msg': msg};
+    }
+  }
+
   Response _errorResponse(DioException e) {
     final message = e.response?.data is Map
         ? (e.response!.data as Map)['message'] ?? e.message

@@ -1,6 +1,7 @@
 import 'package:PiliPlus/common/widgets/flutter/list_tile.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
 import 'package:PiliPlus/http/login.dart';
+import 'package:PiliPlus/http/self_request.dart';
 import 'package:PiliPlus/models/common/setting_type.dart';
 import 'package:PiliPlus/pages/about/view.dart';
 import 'package:PiliPlus/pages/login/controller.dart';
@@ -42,6 +43,7 @@ class SettingPage extends StatefulWidget {
 class _SettingPageState extends State<SettingPage> {
   late SettingType _type = SettingType.privacySetting;
   final RxBool _noAccount = Accounts.account.isEmpty.obs;
+  final RxBool _selfLoggedIn = (SelfRequest.token != null).obs;
   late bool _isPortrait;
 
   static const List<_SettingsModel> _items = [
@@ -144,6 +146,7 @@ class _SettingPageState extends State<SettingPage> {
   @override
   void dispose() {
     _noAccount.close();
+    _selfLoggedIn.close();
     super.dispose();
   }
 
@@ -187,6 +190,17 @@ class _SettingPageState extends State<SettingPage> {
                     : Text(item.subtitle!, style: subTitleStyle),
               ),
             ),
+        Obx(
+          () => ListTile(
+            onTap: () => _selfServerDialog(context),
+            leading: const Icon(Icons.dns_outlined),
+            title: Text('自建服务器', style: titleStyle),
+            subtitle: Text(
+              _selfLoggedIn.value ? '已登录' : '未登录',
+              style: subTitleStyle,
+            ),
+          ),
+        ),
         ListTile(
           onTap: () => LoginPageController.switchAccountDialog(context),
           leading: const Icon(Icons.switch_account_outlined),
@@ -276,6 +290,103 @@ class _SettingPageState extends State<SettingPage> {
         );
       },
     );
+  }
+
+  Future<void> _selfServerDialog(BuildContext context) async {
+    final usernameController = TextEditingController();
+    final passwordController = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(
+            SelfRequest.token != null ? '自建服务器（已登录）' : '自建服务器（未登录）',
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: usernameController,
+                decoration: const InputDecoration(
+                  labelText: '用户名',
+                  prefixIcon: Icon(Icons.person_outline),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: '密码',
+                  prefixIcon: Icon(Icons.lock_outline),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            if (SelfRequest.token != null)
+              TextButton(
+                onPressed: () {
+                  SelfRequest.setToken(null);
+                  _selfLoggedIn.value = false;
+                  Get.back();
+                  SmartDialog.showToast('已登出自建服务器');
+                },
+                child: Text(
+                  '登出',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ),
+            TextButton(
+              onPressed: () async {
+                final u = usernameController.text.trim();
+                final p = passwordController.text;
+                if (u.isEmpty || p.isEmpty) {
+                  SmartDialog.showToast('请输入用户名和密码');
+                  return;
+                }
+                SmartDialog.showLoading();
+                final res = await SelfRequest.register(u, p);
+                SmartDialog.dismiss();
+                SmartDialog.showToast(res['msg'].toString());
+                if (res['status'] == true) {
+                  _selfLoggedIn.value = SelfRequest.token != null;
+                  if (SelfRequest.token != null && context.mounted) {
+                    Get.back();
+                  }
+                }
+              },
+              child: const Text('注册'),
+            ),
+            TextButton(
+              onPressed: () async {
+                final u = usernameController.text.trim();
+                final p = passwordController.text;
+                if (u.isEmpty || p.isEmpty) {
+                  SmartDialog.showToast('请输入用户名和密码');
+                  return;
+                }
+                SmartDialog.showLoading();
+                final res = await SelfRequest.login(u, p);
+                SmartDialog.dismiss();
+                SmartDialog.showToast(res['msg'].toString());
+                if (res['status'] == true) {
+                  _selfLoggedIn.value = true;
+                  if (context.mounted) Get.back();
+                }
+              },
+              child: const Text('登录'),
+            ),
+          ],
+        );
+      },
+    );
+
+    usernameController.dispose();
+    passwordController.dispose();
   }
 
   Widget _buildSearchItem(ThemeData theme) => Padding(
