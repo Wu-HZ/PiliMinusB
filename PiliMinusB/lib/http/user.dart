@@ -1,6 +1,7 @@
 import 'package:PiliPlus/http/api.dart';
 import 'package:PiliPlus/http/init.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/http/self_request.dart';
 import 'package:PiliPlus/models/user/info.dart';
 import 'package:PiliPlus/models/user/stat.dart';
 import 'package:PiliPlus/models_new/coin_log/data.dart';
@@ -61,17 +62,15 @@ abstract final class UserHttp {
     String keyword = '',
     bool asc = false,
   }) async {
-    final res = await Request().get(
+    final res = await SelfRequest().get(
       Api.seeYouLater,
-      queryParameters: await WbiSign.makSign({
+      queryParameters: {
         'pn': page,
         'ps': 20,
         'viewed': viewed,
         'key': keyword,
         'asc': asc,
-        'need_split': true,
-        'web_location': 333.881,
-      }),
+      },
     );
     if (res.data['code'] == 0) {
       return Success(LaterData.fromJson(res.data['data']));
@@ -170,12 +169,11 @@ abstract final class UserHttp {
     Object? aid,
   }) async {
     assert(aid != null || bvid != null);
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       Api.toViewLater,
       data: {
         'aid': ?aid,
         'bvid': ?bvid,
-        'csrf': Accounts.main.csrf,
       },
       options: Options(contentType: Headers.formUrlEncodedContentType),
     );
@@ -191,10 +189,9 @@ abstract final class UserHttp {
   // 移除已观看
   static Future<LoadingState<Null>> toViewDel({required String aids}) async {
     final Map<String, dynamic> params = {
-      'csrf': Accounts.main.csrf,
       'resources': aids,
     };
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       Api.toViewDel,
       data: params,
       options: Options(contentType: Headers.formUrlEncodedContentType),
@@ -229,11 +226,10 @@ abstract final class UserHttp {
 
   // 清空稍后再看 // clean_type: null->all, 1->invalid, 2->viewed
   static Future<LoadingState<Null>> toViewClear([int? cleanType]) async {
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       Api.toViewClear,
       data: {
         'clean_type': ?cleanType,
-        'csrf': Accounts.main.csrf,
       },
       options: Options(contentType: Headers.formUrlEncodedContentType),
     );
@@ -358,22 +354,37 @@ abstract final class UserHttp {
     dynamic sortField = 1,
     bool direction = false,
   }) async {
-    final res = await Request().get(
-      Api.mediaList,
-      queryParameters: {
-        'mobi_app': 'web',
-        'type': type,
-        'biz_id': bizId,
-        'oid': ?oid,
-        'otype': ?otype, // ugc:2 // pgc: 24
-        'ps': ps,
-        'direction': direction,
-        'desc': desc,
-        'sort_field': sortField,
-        'tid': 0,
-        'with_current': withCurrent,
-      },
-    );
+    // type==2: watch later → route to self-hosted server
+    final isSelf = type == 2;
+    final res = isSelf
+        ? await SelfRequest().get(
+            Api.mediaList,
+            queryParameters: {
+              'type': type,
+              'biz_id': bizId,
+              'oid': ?oid,
+              'ps': ps,
+              'direction': direction,
+              'desc': desc,
+              'with_current': withCurrent,
+            },
+          )
+        : await Request().get(
+            Api.mediaList,
+            queryParameters: {
+              'mobi_app': 'web',
+              'type': type,
+              'biz_id': bizId,
+              'oid': ?oid,
+              'otype': ?otype, // ugc:2 // pgc: 24
+              'ps': ps,
+              'direction': direction,
+              'desc': desc,
+              'sort_field': sortField,
+              'tid': 0,
+              'with_current': withCurrent,
+            },
+          );
     if (res.data['code'] == 0) {
       return Success(MediaListData.fromJson(res.data['data']));
     } else {
