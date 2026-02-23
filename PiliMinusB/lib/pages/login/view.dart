@@ -5,6 +5,7 @@ import 'package:PiliPlus/common/constants.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/loading_widget.dart';
 import 'package:PiliPlus/common/widgets/scroll_physics.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/http/self_request.dart';
 import 'package:PiliPlus/pages/login/controller.dart';
 import 'package:PiliPlus/utils/extension/size_ext.dart';
 import 'package:PiliPlus/utils/extension/widget_ext.dart';
@@ -38,6 +39,13 @@ class _LoginPageState extends State<LoginPage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _loginPageCtr.didChangeDependencies(context);
+  }
+
+  @override
+  void dispose() {
+    _selfUsernameController.dispose();
+    _selfPasswordController.dispose();
+    super.dispose();
   }
 
   Widget loginByQRCode(ThemeData theme) {
@@ -570,6 +578,12 @@ class _LoginPageState extends State<LoginPage> {
                           ],
                         ),
                       ),
+                      Tab(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [Icon(Icons.dns_outlined), Text(' 自建')],
+                        ),
+                      ),
                     ],
                     controller: _loginPageCtr.tabController,
                   ),
@@ -579,11 +593,13 @@ class _LoginPageState extends State<LoginPage> {
         ),
         bottom: !isLandscape
             ? TabBar(
+                isScrollable: true,
                 tabs: const [
                   Tab(icon: Icon(Icons.password), text: '密码'),
                   Tab(icon: Icon(Icons.sms_outlined), text: '短信'),
                   Tab(icon: Icon(Icons.qr_code), text: '扫码'),
                   Tab(icon: Icon(Icons.cookie_outlined), text: 'Cookie'),
+                  Tab(icon: Icon(Icons.dns_outlined), text: '自建'),
                 ],
                 controller: _loginPageCtr.tabController,
               )
@@ -603,9 +619,125 @@ class _LoginPageState extends State<LoginPage> {
             tabViewOuter(loginBySmS(theme)),
             tabViewOuter(loginByQRCode(theme)),
             tabViewOuter(loginByCookie(theme)),
+            tabViewOuter(loginBySelfServer(theme)),
           ],
         ),
       ),
+    );
+  }
+
+  final TextEditingController _selfUsernameController = TextEditingController();
+  final TextEditingController _selfPasswordController = TextEditingController();
+
+  Widget loginBySelfServer(ThemeData theme) {
+    return Column(
+      children: [
+        const SizedBox(height: 20),
+        Text(
+          SelfRequest.token != null ? '自建服务器（已登录）' : '登录自建服务器',
+        ),
+        const SizedBox(height: 10),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          child: TextField(
+            controller: _selfUsernameController,
+            inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r"\s"))],
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.person_outline),
+              border: const UnderlineInputBorder(),
+              labelText: '用户名',
+              suffixIcon: IconButton(
+                onPressed: _selfUsernameController.clear,
+                icon: const Icon(Icons.clear),
+              ),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          child: TextField(
+            controller: _selfPasswordController,
+            obscureText: true,
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.lock_outline),
+              border: const UnderlineInputBorder(),
+              labelText: '密码',
+              suffixIcon: IconButton(
+                onPressed: _selfPasswordController.clear,
+                icon: const Icon(Icons.clear),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            OutlinedButton.icon(
+              onPressed: () async {
+                final u = _selfUsernameController.text.trim();
+                final p = _selfPasswordController.text;
+                if (u.isEmpty || p.isEmpty) {
+                  SmartDialog.showToast('用户名或密码不能为空');
+                  return;
+                }
+                SmartDialog.showLoading();
+                final res = await SelfRequest.register(u, p);
+                SmartDialog.dismiss();
+                SmartDialog.showToast(res['msg'].toString());
+              },
+              icon: const Icon(Icons.person_add_outlined),
+              label: const Text('注册'),
+            ),
+            const SizedBox(width: 16),
+            OutlinedButton.icon(
+              onPressed: () async {
+                final u = _selfUsernameController.text.trim();
+                final p = _selfPasswordController.text;
+                if (u.isEmpty || p.isEmpty) {
+                  SmartDialog.showToast('用户名或密码不能为空');
+                  return;
+                }
+                SmartDialog.showLoading();
+                final res = await SelfRequest.login(u, p);
+                SmartDialog.dismiss();
+                SmartDialog.showToast(res['msg'].toString());
+                if (res['status'] == true) {
+                  setState(() {});
+                }
+              },
+              icon: const Icon(Icons.login),
+              label: const Text('登录'),
+            ),
+          ],
+        ),
+        if (SelfRequest.token != null) ...[
+          const SizedBox(height: 16),
+          TextButton(
+            onPressed: () {
+              SelfRequest.setToken(null);
+              setState(() {});
+              SmartDialog.showToast('已登出自建服务器');
+            },
+            child: Text(
+              '登出自建服务器',
+              style: TextStyle(color: theme.colorScheme.error),
+            ),
+          ),
+        ],
+        const SizedBox(height: 20),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Text(
+            '连接至 PiliMinusB 自建服务器。\n'
+            '注册后请登录以获取访问令牌。',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.labelSmall!.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
