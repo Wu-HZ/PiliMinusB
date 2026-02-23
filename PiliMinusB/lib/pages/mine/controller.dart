@@ -1,5 +1,6 @@
 import 'package:PiliPlus/http/fav.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/http/self_request.dart';
 import 'package:PiliPlus/http/user.dart';
 import 'package:PiliPlus/models/common/account_type.dart';
 import 'package:PiliPlus/models/common/theme/theme_type.dart';
@@ -72,7 +73,7 @@ class MineController extends CommonDataController<FavFolderData, FavFolderData>
           icon: Icons.watch_later_outlined,
           title: '稍后再看',
           onTap: () {
-            if (isLogin) {
+            if (isLogin || SelfRequest.token != null) {
               Get.toNamed('/later');
             }
           },
