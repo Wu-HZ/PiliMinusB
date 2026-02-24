@@ -7,6 +7,7 @@ import 'dart:ui' as ui;
 import 'package:PiliPlus/common/constants.dart';
 import 'package:PiliPlus/http/init.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/http/self_request.dart';
 import 'package:PiliPlus/http/ua_type.dart';
 import 'package:PiliPlus/http/video.dart';
 import 'package:PiliPlus/models/common/account_type.dart';
@@ -651,7 +652,7 @@ class PlPlayerController with BlockConfigMixin {
 
   // 添加一个私有构造函数
   PlPlayerController._() {
-    if (!Accounts.heartbeat.isLogin || Pref.historyPause) {
+    if ((!Accounts.heartbeat.isLogin && SelfRequest.token == null) || Pref.historyPause) {
       enableHeart = false;
     }
 

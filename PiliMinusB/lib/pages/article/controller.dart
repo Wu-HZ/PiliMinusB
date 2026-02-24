@@ -1,6 +1,7 @@
 import 'package:PiliPlus/http/dynamics.dart';
 import 'package:PiliPlus/http/fav.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/http/self_request.dart';
 import 'package:PiliPlus/http/video.dart';
 import 'package:PiliPlus/models/dynamics/article_content_model.dart'
     show ArticleContentModel;
@@ -169,7 +170,7 @@ class ArticleController extends CommonDynController {
     }
     if (isLoaded.value) {
       queryData();
-      if (Accounts.heartbeat.isLogin && !Pref.historyPause) {
+      if ((Accounts.heartbeat.isLogin || SelfRequest.token != null) && !Pref.historyPause) {
         VideoHttp.historyReport(aid: commentId, type: 5);
       }
     }

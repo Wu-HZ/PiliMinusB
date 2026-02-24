@@ -86,7 +86,7 @@ abstract final class UserHttp {
     int? viewAt,
     Account? account,
   }) async {
-    final res = await Request().get(
+    final res = await SelfRequest().get(
       Api.historyList,
       queryParameters: {
         'type': type,
@@ -94,7 +94,6 @@ abstract final class UserHttp {
         'max': max ?? 0,
         'view_at': viewAt ?? 0,
       },
-      options: Options(extra: {'account': account ?? Accounts.history}),
     );
     if (res.data['code'] == 0) {
       return Success(HistoryData.fromJson(res.data['data']));
@@ -108,19 +107,12 @@ abstract final class UserHttp {
     bool switchStatus, {
     Account? account,
   }) async {
-    // 暂停switchStatus传true 否则false
-    account ??= Accounts.history;
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       Api.pauseHistory,
       data: {
         'switch': switchStatus,
-        'jsonp': 'jsonp',
-        'csrf': account.csrf,
       },
-      options: Options(
-        extra: {'account': account},
-        contentType: Headers.formUrlEncodedContentType,
-      ),
+      options: Options(contentType: Headers.formUrlEncodedContentType),
     );
     if (res.data['code'] == 0) {
       return const Success(null);
@@ -131,9 +123,8 @@ abstract final class UserHttp {
 
   // 观看历史暂停状态
   static Future<LoadingState<bool>> historyStatus({Account? account}) async {
-    final res = await Request().get(
+    final res = await SelfRequest().get(
       Api.historyStatus,
-      options: Options(extra: {'account': account ?? Accounts.history}),
     );
     if (res.data['code'] == 0) {
       return Success(res.data['data']);
@@ -144,17 +135,9 @@ abstract final class UserHttp {
 
   // 清空历史记录
   static Future<LoadingState<Null>> clearHistory({Account? account}) async {
-    account ??= Accounts.history;
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       Api.clearHistory,
-      data: {
-        'jsonp': 'jsonp',
-        'csrf': account.csrf,
-      },
-      options: Options(
-        extra: {'account': account},
-        contentType: Headers.formUrlEncodedContentType,
-      ),
+      options: Options(contentType: Headers.formUrlEncodedContentType),
     );
     if (res.data['code'] == 0) {
       return const Success(null);
@@ -245,18 +228,12 @@ abstract final class UserHttp {
     String kid, {
     Account? account,
   }) async {
-    account ??= Accounts.history;
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       Api.delHistory,
       data: {
         'kid': kid,
-        'jsonp': 'jsonp',
-        'csrf': account.csrf,
       },
-      options: Options(
-        extra: {'account': account},
-        contentType: Headers.formUrlEncodedContentType,
-      ),
+      options: Options(contentType: Headers.formUrlEncodedContentType),
     );
     if (res.data['code'] == 0) {
       return const Success(null);
@@ -285,14 +262,13 @@ abstract final class UserHttp {
     required String keyword,
     Account? account,
   }) async {
-    final res = await Request().get(
+    final res = await SelfRequest().get(
       Api.searchHistory,
       queryParameters: {
         'pn': pn,
         'keyword': keyword,
         'business': 'all',
       },
-      options: Options(extra: {'account': account ?? Accounts.history}),
     );
     if (res.data['code'] == 0) {
       return Success(HistoryData.fromJson(res.data['data']));

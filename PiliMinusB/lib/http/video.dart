@@ -5,6 +5,7 @@ import 'package:PiliPlus/http/api.dart';
 import 'package:PiliPlus/http/init.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/http/login.dart';
+import 'package:PiliPlus/http/self_request.dart';
 import 'package:PiliPlus/http/ua_type.dart';
 import 'package:PiliPlus/models/common/account_type.dart';
 import 'package:PiliPlus/models/common/video/video_type.dart';
@@ -658,12 +659,11 @@ abstract final class VideoHttp {
     required Object aid,
     required Object type,
   }) {
-    return Request().post(
+    return SelfRequest().post(
       Api.historyReport,
       data: {
         'aid': aid,
         'type': type,
-        'csrf': Accounts.heartbeat.csrf,
       },
       options: Options(contentType: Headers.formUrlEncodedContentType),
     );
@@ -681,7 +681,7 @@ abstract final class VideoHttp {
     required VideoType videoType,
   }) {
     final isPugv = videoType == VideoType.pugv;
-    return Request().post(
+    return SelfRequest().post(
       Api.heartBeat,
       data: {
         if (isPugv) 'aid': ?aid else 'bvid': ?bvid,
@@ -691,7 +691,6 @@ abstract final class VideoHttp {
         'type': videoType.type,
         'sub_type': ?subType,
         'played_time': progress,
-        'csrf': Accounts.heartbeat.csrf,
       },
       options: Options(contentType: Headers.formUrlEncodedContentType),
     );
@@ -702,13 +701,12 @@ abstract final class VideoHttp {
     required Object oid,
     required Object upperMid,
   }) {
-    return Request().post(
+    return SelfRequest().post(
       Api.mediaListHistory,
       data: {
         'desc': desc,
         'oid': oid,
         'upper_mid': upperMid,
-        'csrf': Accounts.heartbeat.csrf,
       },
       options: Options(contentType: Headers.formUrlEncodedContentType),
     );

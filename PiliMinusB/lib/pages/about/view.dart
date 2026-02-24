@@ -6,6 +6,7 @@ import 'package:PiliPlus/build_config.dart';
 import 'package:PiliPlus/common/constants.dart';
 import 'package:PiliPlus/common/widgets/dialog/dialog.dart';
 import 'package:PiliPlus/common/widgets/flutter/list_tile.dart';
+import 'package:PiliPlus/http/self_request.dart';
 import 'package:PiliPlus/pages/mine/controller.dart';
 import 'package:PiliPlus/services/logger.dart';
 import 'package:PiliPlus/utils/accounts.dart';
@@ -256,7 +257,7 @@ Commit Hash: ${BuildConfig.commitHash}''',
                 );
                 await Accounts.account.putAll(res);
                 await Accounts.refresh();
-                MineController.anonymity.value = !Accounts.heartbeat.isLogin;
+                MineController.anonymity.value = !Accounts.heartbeat.isLogin && SelfRequest.token == null;
                 if (Accounts.main.isLogin) {
                   await LoginUtils.onLoginMain();
                 }

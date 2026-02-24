@@ -17,7 +17,7 @@ func main() {
 
 	// Database
 	database.Init()
-	database.DB.AutoMigrate(&model.User{}, &model.WatchLater{})
+	database.DB.AutoMigrate(&model.User{}, &model.WatchLater{}, &model.WatchHistory{}, &model.UserSettings{})
 
 	// Router
 	r := gin.Default()
@@ -40,7 +40,17 @@ func main() {
 		api.POST("/x/v2/history/toview/clear", handler.ToviewClear)
 		api.GET("/x/v2/medialist/resource/list", handler.MediaList)
 
-		// Phase 2: History      — will be added here
+		// Phase 2: History
+		api.GET("/x/web-interface/history/cursor", handler.HistoryList)
+		api.GET("/x/web-interface/history/search", handler.SearchHistory)
+		api.POST("/x/v2/history/delete", handler.DelHistory)
+		api.POST("/x/v2/history/clear", handler.ClearHistory)
+		api.POST("/x/v2/history/shadow/set", handler.HistoryShadowSet)
+		api.GET("/x/v2/history/shadow", handler.HistoryShadow)
+		api.POST("/x/click-interface/web/heartbeat", handler.HeartBeat)
+		api.POST("/x/v2/history/report", handler.HistoryReport)
+		api.POST("/x/v1/medialist/history", handler.MedialistHistory)
+
 		// Phase 3: Favorites    — will be added here
 		// Phase 4: Follow       — will be added here
 	}
