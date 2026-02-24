@@ -266,6 +266,13 @@ func HeartBeat(c *gin.Context) {
 	epid, _ := strconv.ParseInt(epidStr, 10, 64)
 	sid, _ := strconv.ParseInt(sidStr, 10, 64)
 
+	// Resolve bvid → aid early so the DB lookup uses the real aid
+	if aid == 0 && bvid != "" {
+		if info, err := bilibili.FetchVideoInfo(0, bvid); err == nil && info != nil && info.Aid != 0 {
+			aid = info.Aid
+		}
+	}
+
 	// Determine business type from type parameter
 	business := "archive"
 	if typeStr == "4" || epid > 0 {
