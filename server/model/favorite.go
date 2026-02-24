@@ -117,3 +117,29 @@ func (r *FavResource) ToBiliJSON() map[string]interface{} {
 		},
 	}
 }
+
+// ToMediaListJSON converts to MediaList-compatible JSON map.
+// This matches the format expected by MediaListItemModel.fromJson on the client.
+func (r *FavResource) ToMediaListJSON() map[string]interface{} {
+	return map[string]interface{}{
+		"id":       r.ResourceID,
+		"title":    r.Title,
+		"cover":    r.Cover,
+		"duration": r.Duration,
+		"pubtime":  r.Pubtime,
+		"bv_id":    r.Bvid,
+		"type":     r.ResourceType,
+		"upper": map[string]interface{}{
+			"mid":  r.UpperMid,
+			"name": r.UpperName,
+			"face": "",
+		},
+		"cnt_info": map[string]interface{}{
+			"play":    0,
+			"danmaku": 0,
+		},
+		"pages": []map[string]interface{}{
+			{"id": r.Cid, "title": "", "page": 1},
+		},
+	}
+}

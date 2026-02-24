@@ -154,8 +154,104 @@ func ToviewDel(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-// GET /x/v2/medialist/resource/list (type=2, watch later)
+// GET /x/v2/medialist/resource/list (type=2: watch later, type=3: favorites)
 func MediaList(c *gin.Context) {
+	typeStr := c.DefaultQuery("type", "2")
+	mediaType, _ := strconv.Atoi(typeStr)
+
+	switch mediaType {
+	case 3:
+		mediaListFav(c)
+	default:
+		mediaListWatchLater(c)
+	}
+}
+
+// mediaListFav handles type=3 (favorites folder content).
+func mediaListFav(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+
+	bizIDStr := c.DefaultQuery("biz_id", "0")
+	bizID, _ := strconv.ParseInt(bizIDStr, 10, 64)
+	ps, _ := strconv.Atoi(c.DefaultQuery("ps", "20"))
+	oidStr := c.DefaultQuery("oid", "")
+	descStr := c.DefaultQuery("desc", "true")
+	directionStr := c.DefaultQuery("direction", "false")
+	withCurrentStr := c.DefaultQuery("with_current", "false")
+
+	desc := descStr == "true" || descStr == "1"
+	direction := directionStr == "true" || directionStr == "1"
+	withCurrent := withCurrentStr == "true" || withCurrentStr == "1"
+
+	query := database.DB.Where("user_id = ? AND media_id = ?", userID, bizID)
+
+	if oidStr != "" && !withCurrent {
+		oid, err := strconv.ParseInt(oidStr, 10, 64)
+		if err == nil && oid > 0 {
+			var cursor model.FavResource
+			if err := database.DB.Where("user_id = ? AND media_id = ? AND resource_id = ?", userID, bizID, oid).
+				First(&cursor).Error; err == nil {
+				if direction {
+					if desc {
+						query = query.Where("fav_time > ?", cursor.FavTime)
+					} else {
+						query = query.Where("fav_time < ?", cursor.FavTime)
+					}
+				} else {
+					if desc {
+						query = query.Where("fav_time < ?", cursor.FavTime)
+					} else {
+						query = query.Where("fav_time > ?", cursor.FavTime)
+					}
+				}
+			}
+		}
+	}
+
+	var totalCount int64
+	database.DB.Model(&model.FavResource{}).
+		Where("user_id = ? AND media_id = ?", userID, bizID).Count(&totalCount)
+
+	order := "fav_time DESC"
+	if !desc {
+		order = "fav_time ASC"
+	}
+	if direction {
+		if desc {
+			order = "fav_time ASC"
+		} else {
+			order = "fav_time DESC"
+		}
+	}
+
+	var items []model.FavResource
+	query.Order(order).Limit(ps + 1).Find(&items)
+
+	hasMore := len(items) > ps
+	if hasMore {
+		items = items[:ps]
+	}
+
+	if direction {
+		for i, j := 0, len(items)-1; i < j; i, j = i+1, j-1 {
+			items[i], items[j] = items[j], items[i]
+		}
+	}
+
+	mediaList := make([]map[string]interface{}, 0, len(items))
+	for _, item := range items {
+		mediaList = append(mediaList, item.ToMediaListJSON())
+	}
+
+	response.Success(c, gin.H{
+		"media_list":  mediaList,
+		"has_more":    hasMore,
+		"total_count": totalCount,
+	})
+}
+
+// mediaListWatchLater handles type=2 (watch later).
+func mediaListWatchLater(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
 	ps, _ := strconv.Atoi(c.DefaultQuery("ps", "20"))

@@ -330,8 +330,8 @@ abstract final class UserHttp {
     dynamic sortField = 1,
     bool direction = false,
   }) async {
-    // type==2: watch later → route to self-hosted server
-    final isSelf = type == 2;
+    // type==2: watch later, type==3: favorites → route to self-hosted server
+    final isSelf = type == 2 || (type == 3 && SelfRequest.token != null);
     final res = isSelf
         ? await SelfRequest().get(
             Api.mediaList,
