@@ -2,11 +2,9 @@ package handler
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"sort"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -75,7 +73,6 @@ func DynamicFeed(c *gin.Context) {
 	}
 
 	if len(follows) == 0 {
-		log.Printf("[dynamic] DynamicFeed userID=%d: no followings found in DB", userID)
 		response.Success(c, gin.H{
 			"has_more":    false,
 			"offset":      "",
@@ -85,53 +82,23 @@ func DynamicFeed(c *gin.Context) {
 		return
 	}
 
-	log.Printf("[dynamic] DynamicFeed userID=%d: %d followings, offset=%q", userID, len(follows), offsetStr)
-
 	// Build a mid→Following map for author info
 	midMap := make(map[int64]*model.Following, len(follows))
 	for i := range follows {
 		midMap[follows[i].Mid] = &follows[i]
 	}
 
-	// Concurrently fetch videos (semaphore = 10)
-	type midVideos struct {
-		mid    int64
-		videos []bilibili.SpaceVideo
-	}
-
-	sem := make(chan struct{}, 10)
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	var allVideos []midVideos
-
-	for _, f := range follows {
-		wg.Add(1)
-		go func(mid int64) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			vids, _ := bilibili.FetchUserVideos(mid, 10)
-			if len(vids) > 0 {
-				mu.Lock()
-				allVideos = append(allVideos, midVideos{mid: mid, videos: vids})
-				mu.Unlock()
-			}
-		}(f.Mid)
-	}
-	wg.Wait()
-
-	log.Printf("[dynamic] DynamicFeed userID=%d: fetched videos from %d/%d UPs", userID, len(allVideos), len(follows))
-
-	// Flatten and attach owner mid
+	// Read videos from cache (populated by background refresh task)
 	type videoWithOwner struct {
 		bilibili.SpaceVideo
 		OwnerMid int64
 	}
 	var flat []videoWithOwner
-	for _, mv := range allVideos {
-		for _, v := range mv.videos {
-			flat = append(flat, videoWithOwner{SpaceVideo: v, OwnerMid: mv.mid})
+	for _, f := range follows {
+		if vids := bilibili.GetCachedVideos(f.Mid); len(vids) > 0 {
+			for _, v := range vids {
+				flat = append(flat, videoWithOwner{SpaceVideo: v, OwnerMid: f.Mid})
+			}
 		}
 	}
 

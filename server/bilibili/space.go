@@ -34,7 +34,7 @@ type spaceCacheEntry struct {
 var (
 	spaceCache    = make(map[int64]*spaceCacheEntry)
 	spaceCacheMu  sync.RWMutex
-	spaceCacheTTL = 5 * time.Minute
+	spaceCacheTTL = 48 * time.Hour
 )
 
 const (
@@ -45,6 +45,11 @@ const (
 	// App API signing credentials (same as the app uses)
 	appKey = "dfca71928277209b"
 	appSec = "b5475a8825547a4fc26c7d518eaaa02e"
+
+	// Background refresh settings
+	refreshInterval = 30 * time.Minute // how often the refresh loop runs
+	fetchDelay      = 1 * time.Second  // delay between each Bilibili API call
+	videosPerUP     = 5                // number of videos to fetch per UP
 )
 
 // appSign adds appkey, ts, and sign to the params (Bilibili app API auth).
@@ -74,17 +79,61 @@ func appSign(params url.Values) {
 	params.Set("sign", hex.EncodeToString(hash[:]))
 }
 
-// FetchUserVideos queries Bilibili's App API for a UP's recent videos.
-// Results are cached per mid with a 5-minute TTL.
-func FetchUserVideos(mid int64, ps int) ([]SpaceVideo, error) {
-	// Check cache
+// GetCachedVideos returns cached videos for a mid. Returns nil on cache miss.
+func GetCachedVideos(mid int64) []SpaceVideo {
 	spaceCacheMu.RLock()
+	defer spaceCacheMu.RUnlock()
 	if entry, ok := spaceCache[mid]; ok && time.Since(entry.ts) < spaceCacheTTL {
-		spaceCacheMu.RUnlock()
-		return entry.videos, nil
+		return entry.videos
 	}
-	spaceCacheMu.RUnlock()
+	return nil
+}
 
+// StartBackgroundRefresh launches a goroutine that periodically fetches videos
+// for all followed UPs. Requests are staggered (1/sec) to avoid rate limiting.
+// getFollowedMids should return all unique UP mids across all users.
+func StartBackgroundRefresh(getFollowedMids func() []int64) {
+	go func() {
+		// Run immediately on startup
+		refreshAllMids(getFollowedMids)
+
+		ticker := time.NewTicker(refreshInterval)
+		defer ticker.Stop()
+		for range ticker.C {
+			refreshAllMids(getFollowedMids)
+		}
+	}()
+}
+
+func refreshAllMids(getFollowedMids func() []int64) {
+	mids := getFollowedMids()
+	if len(mids) == 0 {
+		return
+	}
+
+	log.Printf("[space] background refresh starting: %d UPs to check", len(mids))
+	fetched := 0
+
+	for _, mid := range mids {
+		// Skip if cache is still fresh (less than half the TTL)
+		spaceCacheMu.RLock()
+		if entry, ok := spaceCache[mid]; ok && time.Since(entry.ts) < spaceCacheTTL/2 {
+			spaceCacheMu.RUnlock()
+			continue
+		}
+		spaceCacheMu.RUnlock()
+
+		fetchUserVideos(mid, videosPerUP)
+		fetched++
+		time.Sleep(fetchDelay)
+	}
+
+	log.Printf("[space] background refresh done: fetched %d/%d UPs", fetched, len(mids))
+}
+
+// fetchUserVideos queries Bilibili's App API for a UP's recent videos
+// and updates the cache. Called by the background refresh task.
+func fetchUserVideos(mid int64, ps int) {
 	params := url.Values{
 		"vmid":       {fmt.Sprintf("%d", mid)},
 		"ps":         {fmt.Sprintf("%d", ps)},
@@ -106,7 +155,8 @@ func FetchUserVideos(mid int64, ps int) ([]SpaceVideo, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequest("GET", reqURL, nil)
 	if err != nil {
-		return nil, err
+		log.Printf("[space] fetchUserVideos mid=%d request build error: %v", mid, err)
+		return
 	}
 	req.Header.Set("User-Agent", appUA)
 	req.Header.Set("Referer", "https://www.bilibili.com")
@@ -114,15 +164,15 @@ func FetchUserVideos(mid int64, ps int) ([]SpaceVideo, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("[space] FetchUserVideos mid=%d network error: %v", mid, err)
-		return nil, nil
+		log.Printf("[space] fetchUserVideos mid=%d network error: %v", mid, err)
+		return
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("[space] FetchUserVideos mid=%d read body error: %v", mid, err)
-		return nil, nil
+		log.Printf("[space] fetchUserVideos mid=%d read body error: %v", mid, err)
+		return
 	}
 
 	var result struct {
@@ -143,16 +193,13 @@ func FetchUserVideos(mid int64, ps int) ([]SpaceVideo, error) {
 	}
 
 	if err := json.Unmarshal(body, &result); err != nil {
-		log.Printf("[space] FetchUserVideos mid=%d JSON parse error: %v", mid, err)
-		return nil, nil
+		log.Printf("[space] fetchUserVideos mid=%d JSON parse error: %v", mid, err)
+		return
 	}
 
 	if result.Code != 0 {
-		log.Printf("[space] FetchUserVideos mid=%d API error: code=%d msg=%s", mid, result.Code, result.Message)
-		spaceCacheMu.Lock()
-		spaceCache[mid] = &spaceCacheEntry{videos: nil, ts: time.Now().Add(-spaceCacheTTL + time.Minute)}
-		spaceCacheMu.Unlock()
-		return nil, nil
+		log.Printf("[space] fetchUserVideos mid=%d API error: code=%d msg=%s", mid, result.Code, result.Message)
+		return
 	}
 
 	videos := make([]SpaceVideo, 0, len(result.Data.Item))
@@ -171,11 +218,7 @@ func FetchUserVideos(mid int64, ps int) ([]SpaceVideo, error) {
 		})
 	}
 
-	log.Printf("[space] FetchUserVideos mid=%d fetched %d videos", mid, len(videos))
-
 	spaceCacheMu.Lock()
 	spaceCache[mid] = &spaceCacheEntry{videos: videos, ts: time.Now()}
 	spaceCacheMu.Unlock()
-
-	return videos, nil
 }

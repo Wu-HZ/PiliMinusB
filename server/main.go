@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"piliminusb/bilibili"
 	"piliminusb/config"
 	"piliminusb/database"
 	"piliminusb/handler"
@@ -18,6 +19,13 @@ func main() {
 	// Database
 	database.Init()
 	database.DB.AutoMigrate(&model.User{}, &model.WatchLater{}, &model.WatchHistory{}, &model.UserSettings{}, &model.FavFolder{}, &model.FavResource{}, &model.Following{}, &model.FollowTag{}, &model.FollowTagMember{}, &model.BangumiFollow{})
+
+	// Start background task: periodically fetch UP videos from Bilibili
+	bilibili.StartBackgroundRefresh(func() []int64 {
+		var mids []int64
+		database.DB.Model(&model.Following{}).Distinct("mid").Pluck("mid", &mids)
+		return mids
+	})
 
 	// Router
 	r := gin.Default()
