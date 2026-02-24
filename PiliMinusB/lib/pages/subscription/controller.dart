@@ -1,5 +1,6 @@
 import 'package:PiliPlus/http/fav.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/http/self_request.dart';
 import 'package:PiliPlus/http/user.dart';
 import 'package:PiliPlus/models_new/sub/sub/data.dart';
 import 'package:PiliPlus/models_new/sub/sub/list.dart';
@@ -20,7 +21,7 @@ class SubController extends CommonListController<SubData, SubItemModel> {
 
   @override
   Future<void> queryData([bool isRefresh = true]) {
-    if (!account.isLogin) {
+    if (!account.isLogin && SelfRequest.token == null) {
       loadingState.value = const Error('账号未登录');
       return Future.syncValue(null);
     }
@@ -77,6 +78,6 @@ class SubController extends CommonListController<SubData, SubItemModel> {
   Future<LoadingState<SubData>> customGetData() => UserHttp.userSubFolder(
     pn: page,
     ps: 20,
-    mid: account.mid,
+    mid: account.isLogin ? account.mid : 0,
   );
 }

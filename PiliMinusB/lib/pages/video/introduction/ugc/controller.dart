@@ -445,6 +445,8 @@ class UgcIntroController extends CommonIntroController with ReloadMixin {
         mid: mid,
         isFollow: attr != 0,
         followStatus: followStatus,
+        uname: videoDetail.owner?.name,
+        face: videoDetail.owner?.face,
         afterMod: (attribute) {
           followStatus['attribute'] = attribute;
           Future.delayed(const Duration(milliseconds: 500), queryFollowStatus);

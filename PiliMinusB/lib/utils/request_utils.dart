@@ -104,6 +104,8 @@ abstract final class RequestUtils {
     required bool isFollow,
     required ValueChanged<int>? afterMod,
     Map? followStatus,
+    String? uname,
+    String? face,
   }) async {
     if (mid == null) {
       return;
@@ -114,6 +116,8 @@ abstract final class RequestUtils {
         mid: mid,
         act: 1,
         reSrc: 11,
+        uname: uname,
+        face: face,
       );
       if (res.isSuccess) {
         SmartDialog.showToast('关注成功');

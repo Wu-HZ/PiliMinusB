@@ -37,6 +37,45 @@ func refreshTagCount(userID uint, tagID int64) {
 }
 
 // ---------------------------------------------------------------------------
+// GET /x/relation  — query relation status for a given fid
+// ---------------------------------------------------------------------------
+
+func Relation(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+
+	fidStr := c.Query("fid")
+	fid, _ := strconv.ParseInt(fidStr, 10, 64)
+	if fid == 0 {
+		response.BadRequest(c, "fid is required")
+		return
+	}
+
+	var f model.Following
+	attribute := 0
+	special := 0
+	if database.DB.Where("user_id = ? AND mid = ?", userID, fid).First(&f).Error == nil {
+		attribute = int(f.Attribute)
+		if f.IsSpecial == 1 {
+			special = 1
+		}
+	}
+
+	// Collect tag IDs that contain this follow
+	var members []model.FollowTagMember
+	database.DB.Where("user_id = ? AND follow_mid = ?", userID, fid).Find(&members)
+	tagIDs := make([]int64, 0, len(members))
+	for _, m := range members {
+		tagIDs = append(tagIDs, m.TagID)
+	}
+
+	response.Success(c, gin.H{
+		"attribute": attribute,
+		"special":   special,
+		"tag":       tagIDs,
+	})
+}
+
+// ---------------------------------------------------------------------------
 // GET /x/relation/followings
 // ---------------------------------------------------------------------------
 
@@ -127,16 +166,34 @@ func RelationMod(c *gin.Context) {
 
 	switch act {
 	case 1: // follow
+		uname := c.PostForm("uname")
+		face := c.PostForm("face")
 		var existing model.Following
 		if database.DB.Where("user_id = ? AND mid = ?", userID, fid).
 			First(&existing).Error == gorm.ErrRecordNotFound {
 			f := model.Following{
 				UserID:    userID,
 				Mid:       fid,
+				Name:      uname,
+				Face:      face,
 				Attribute: 2,
 				MTime:     now,
 			}
 			database.DB.Create(&f)
+		} else {
+			// Update name/face if provided
+			updates := map[string]interface{}{}
+			if uname != "" {
+				updates["name"] = uname
+			}
+			if face != "" {
+				updates["face"] = face
+			}
+			if len(updates) > 0 {
+				database.DB.Model(&model.Following{}).
+					Where("user_id = ? AND mid = ?", userID, fid).
+					Updates(updates)
+			}
 		}
 	case 2: // unfollow
 		// Remove from all tags

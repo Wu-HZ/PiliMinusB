@@ -4,6 +4,7 @@ import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/loading_widget.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/http/self_request.dart';
 import 'package:PiliPlus/models/common/image_preview_type.dart';
 import 'package:PiliPlus/models/common/image_type.dart';
 import 'package:PiliPlus/models/common/member/user_info_type.dart';
@@ -300,10 +301,10 @@ class _HorizontalMemberPageState extends State<HorizontalMemberPage> {
                 visualDensity: const VisualDensity(vertical: -2),
               ),
               onPressed: () {
-                if (widget.mid == account.mid) {
+                if (account.isLogin && widget.mid == account.mid) {
                   Get.toNamed('/editProfile');
                 } else {
-                  if (!account.isLogin) {
+                  if (!account.isLogin && SelfRequest.token == null) {
                     SmartDialog.showToast('账号未登录');
                     return;
                   }
@@ -311,6 +312,8 @@ class _HorizontalMemberPageState extends State<HorizontalMemberPage> {
                     context: context,
                     mid: widget.mid,
                     isFollow: memberInfoModel.isFollowed ?? false,
+                    uname: memberInfoModel.name,
+                    face: memberInfoModel.face,
                     afterMod: (attribute) {
                       _controller
                         ..userState.value.data.isFollowed = attribute != 0
@@ -320,7 +323,7 @@ class _HorizontalMemberPageState extends State<HorizontalMemberPage> {
                 }
               },
               child: Text(
-                widget.mid == account.mid
+                account.isLogin && widget.mid == account.mid
                     ? '编辑资料'
                     : memberInfoModel.isFollowed == true
                     ? '已关注'

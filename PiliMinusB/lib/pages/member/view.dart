@@ -3,6 +3,7 @@ import 'package:PiliPlus/common/widgets/dynamic_sliver_appbar_medium.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/loading_widget.dart';
 import 'package:PiliPlus/common/widgets/scroll_physics.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/http/self_request.dart';
 import 'package:PiliPlus/models_new/space/space/data.dart';
 import 'package:PiliPlus/pages/coin_log/controller.dart';
 import 'package:PiliPlus/pages/exp_log/controller.dart';
@@ -112,8 +113,9 @@ class _MemberPageState extends State<MemberPage> {
     PopupMenuButton(
       icon: const Icon(Icons.more_vert),
       itemBuilder: (_) => <PopupMenuEntry>[
-        if (_userController.account.isLogin &&
-            _userController.account.mid != _mid) ...[
+        if ((_userController.account.isLogin
+                ? _userController.account.mid != _mid
+                : SelfRequest.token != null)) ...[
           PopupMenuItem(
             onTap: () => _userController.blockUser(context),
             child: Row(

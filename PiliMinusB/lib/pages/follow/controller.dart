@@ -1,5 +1,6 @@
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/http/member.dart';
+import 'package:PiliPlus/http/self_request.dart';
 import 'package:PiliPlus/models/member/tags.dart';
 import 'package:PiliPlus/utils/accounts.dart';
 import 'package:flutter/material.dart';
@@ -19,10 +20,11 @@ class FollowController extends GetxController with GetTickerProviderStateMixin {
   void onInit() {
     super.onInit();
     final Map? args = Get.arguments;
-    final ownerMid = Accounts.main.mid;
-    final int? mid = args?['mid'];
-    this.mid = mid ?? ownerMid;
-    isOwner = ownerMid == this.mid;
+    final int? argMid = args?['mid'];
+    final int ownerMid = Accounts.main.isLogin ? Accounts.main.mid : 0;
+    mid = argMid ?? ownerMid;
+    isOwner = (Accounts.main.isLogin && ownerMid == mid) ||
+        (!Accounts.main.isLogin && SelfRequest.token != null && argMid == null);
     if (isOwner) {
       queryFollowUpTags();
     } else {

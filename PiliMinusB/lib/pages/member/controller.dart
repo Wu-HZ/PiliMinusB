@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/http/member.dart';
+import 'package:PiliPlus/http/self_request.dart';
 import 'package:PiliPlus/http/user.dart';
 import 'package:PiliPlus/http/video.dart';
 import 'package:PiliPlus/models/common/member/tab_type.dart';
@@ -105,7 +106,7 @@ class MemberController extends CommonDataController<SpaceData, SpaceData?>
         );
       }
     }
-    if (mid == account.mid) {
+    if (account.isLogin && mid == account.mid) {
       spaceSetting = data.setting;
     }
     loadingState.value = response;
@@ -142,7 +143,7 @@ class MemberController extends CommonDataController<SpaceData, SpaceData?>
   );
 
   void blockUser(BuildContext context) {
-    if (!account.isLogin) {
+    if (!account.isLogin && SelfRequest.token == null) {
       SmartDialog.showToast('账号未登录');
       return;
     }
@@ -188,12 +189,12 @@ class MemberController extends CommonDataController<SpaceData, SpaceData?>
   }
 
   void onFollow(BuildContext context) {
-    if (mid == account.mid) {
+    if (account.isLogin && mid == account.mid) {
       Get.toNamed('/editProfile');
     } else if (relation.value == 128) {
       _onBlock();
     } else {
-      if (!account.isLogin) {
+      if (!account.isLogin && SelfRequest.token == null) {
         SmartDialog.showToast('账号未登录');
         return;
       }
@@ -201,6 +202,8 @@ class MemberController extends CommonDataController<SpaceData, SpaceData?>
         context: context,
         mid: mid,
         isFollow: isFollow,
+        uname: username,
+        face: loadingState.value.data?.card?.face,
         afterMod: (attribute) => relation.value = attribute,
       );
     }

@@ -618,6 +618,8 @@ abstract final class VideoHttp {
     required int mid,
     required int act,
     required int reSrc,
+    String? uname,
+    String? face,
   }) async {
     final res = await SelfRequest().post(
       Api.relationMod,
@@ -625,6 +627,8 @@ abstract final class VideoHttp {
         'fid': mid,
         'act': act,
         're_src': reSrc,
+        if (uname != null) 'uname': uname,
+        if (face != null) 'face': face,
       },
       options: Options(
         contentType: Headers.formUrlEncodedContentType,

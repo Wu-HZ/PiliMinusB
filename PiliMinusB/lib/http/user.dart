@@ -243,7 +243,7 @@ abstract final class UserHttp {
   }
 
   static Future<LoadingState<Map>> hasFollow(int mid) async {
-    final res = await Request().get(
+    final res = await SelfRequest().get(
       Api.relation,
       queryParameters: {
         'fid': mid,

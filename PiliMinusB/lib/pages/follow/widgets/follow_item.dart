@@ -85,6 +85,8 @@ class FollowItem extends StatelessWidget {
                     context: context,
                     mid: item.mid,
                     isFollow: item.attribute != -1,
+                    uname: item.uname,
+                    face: item.face,
                     afterMod: afterMod,
                   ),
                   style: FilledButton.styleFrom(

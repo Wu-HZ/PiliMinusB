@@ -63,7 +63,7 @@ class MineController extends CommonDataController<FavFolderData, FavFolderData>
           icon: Icons.subscriptions_outlined,
           title: '我的订阅',
           onTap: () {
-            if (isLogin) {
+            if (isLogin || SelfRequest.token != null) {
               Get.toNamed('/subscription');
             }
           },
@@ -275,6 +275,8 @@ class MineController extends CommonDataController<FavFolderData, FavFolderData>
     late final mid = userInfo.value.mid;
     if (isLogin && mid != null) {
       Get.toNamed('/$name?mid=$mid');
+    } else if (SelfRequest.token != null) {
+      Get.toNamed('/$name');
     }
   }
 

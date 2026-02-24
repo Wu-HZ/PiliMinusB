@@ -75,6 +75,7 @@ func main() {
 		api.POST("/x/v2/history/toview/move", handler.ToviewMove)
 
 		// Phase 4: Following Management
+		api.GET("/x/relation", handler.Relation)
 		api.GET("/x/relation/followings", handler.Followings)
 		api.GET("/x/relation/followings/search", handler.FollowingsSearch)
 		api.POST("/x/relation/modify", handler.RelationMod)
