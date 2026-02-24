@@ -256,9 +256,12 @@ func DelFavFolder(c *gin.Context) {
 func SortFavFolder(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
-	idsStr := c.PostForm("media_ids")
+	idsStr := c.PostForm("sort")
 	if idsStr == "" {
-		response.BadRequest(c, "media_ids is required")
+		idsStr = c.PostForm("media_ids")
+	}
+	if idsStr == "" {
+		response.BadRequest(c, "sort is required")
 		return
 	}
 
@@ -457,15 +460,27 @@ func BatchDealFav(c *gin.Context) {
 func UnfavAll(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
-	mediaIDStr := c.PostForm("media_id")
-	mediaID, _ := strconv.ParseInt(mediaIDStr, 10, 64)
-	if mediaID == 0 {
-		response.BadRequest(c, "media_id is required")
+	ridStr := c.PostForm("rid")
+	rid, _ := strconv.ParseInt(ridStr, 10, 64)
+	if rid == 0 {
+		response.BadRequest(c, "rid is required")
 		return
 	}
 
-	database.DB.Where("user_id = ? AND media_id = ?", userID, mediaID).Delete(&model.FavResource{})
-	refreshMediaCount(userID, mediaID)
+	// Find all folders that contain this resource, then delete.
+	var affected []model.FavResource
+	database.DB.Where("user_id = ? AND resource_id = ?", userID, rid).Find(&affected)
+
+	affectedMediaIDs := map[int64]bool{}
+	for _, r := range affected {
+		affectedMediaIDs[r.MediaID] = true
+	}
+
+	database.DB.Where("user_id = ? AND resource_id = ?", userID, rid).Delete(&model.FavResource{})
+
+	for mid := range affectedMediaIDs {
+		refreshMediaCount(userID, mid)
+	}
 
 	response.Success(c, nil)
 }
@@ -578,7 +593,10 @@ func SortFavResource(c *gin.Context) {
 
 	mediaIDStr := c.PostForm("media_id")
 	mediaID, _ := strconv.ParseInt(mediaIDStr, 10, 64)
-	resourcesStr := c.PostForm("resources")
+	resourcesStr := c.PostForm("sort")
+	if resourcesStr == "" {
+		resourcesStr = c.PostForm("resources")
+	}
 
 	if mediaID == 0 || resourcesStr == "" {
 		response.BadRequest(c, "media_id and resources are required")
@@ -606,7 +624,10 @@ func SortFavResource(c *gin.Context) {
 func ToviewCopy(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
-	mediaIDStr := c.PostForm("media_id")
+	mediaIDStr := c.PostForm("tar_media_id")
+	if mediaIDStr == "" {
+		mediaIDStr = c.PostForm("media_id")
+	}
 	aidsStr := c.PostForm("resources")
 
 	mediaID, _ := strconv.ParseInt(mediaIDStr, 10, 64)
@@ -655,7 +676,10 @@ func ToviewCopy(c *gin.Context) {
 func ToviewMove(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
-	mediaIDStr := c.PostForm("media_id")
+	mediaIDStr := c.PostForm("tar_media_id")
+	if mediaIDStr == "" {
+		mediaIDStr = c.PostForm("media_id")
+	}
 	aidsStr := c.PostForm("resources")
 
 	mediaID, _ := strconv.ParseInt(mediaIDStr, 10, 64)

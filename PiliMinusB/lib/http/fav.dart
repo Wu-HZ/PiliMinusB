@@ -2,6 +2,7 @@ import 'package:PiliPlus/common/constants.dart';
 import 'package:PiliPlus/http/api.dart';
 import 'package:PiliPlus/http/init.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/http/self_request.dart';
 import 'package:PiliPlus/models/common/fav_order_type.dart';
 import 'package:PiliPlus/models_new/fav/fav_article/data.dart';
 import 'package:PiliPlus/models_new/fav/fav_detail/data.dart';
@@ -14,7 +15,6 @@ import 'package:PiliPlus/models_new/space/space_cheese/data.dart';
 import 'package:PiliPlus/models_new/space/space_fav/data.dart';
 import 'package:PiliPlus/models_new/sub/sub_detail/data.dart';
 import 'package:PiliPlus/utils/accounts.dart';
-import 'package:PiliPlus/utils/app_sign.dart';
 import 'package:dio/dio.dart';
 
 abstract final class FavHttp {
@@ -58,7 +58,7 @@ abstract final class FavHttp {
     FavOrderType order = FavOrderType.mtime,
     int type = 0,
   }) async {
-    final res = await Request().get(
+    final res = await SelfRequest().get(
       Api.favResourceList,
       queryParameters: {
         'media_id': mediaId,
@@ -66,9 +66,6 @@ abstract final class FavHttp {
         'ps': ps,
         'keyword': keyword,
         'order': order.name,
-        'type': type,
-        'tid': 0,
-        'platform': 'web',
       },
     );
     if (res.data['code'] == 0) {
@@ -400,12 +397,11 @@ abstract final class FavHttp {
     required int ps,
     required dynamic mid,
   }) async {
-    final res = await Request().get(
+    final res = await SelfRequest().get(
       Api.userFavFolder,
       queryParameters: {
         'pn': pn,
         'ps': ps,
-        'up_mid': mid,
       },
     );
     if (res.data['code'] == 0) {
@@ -418,14 +414,11 @@ abstract final class FavHttp {
   static Future<LoadingState<Null>> sortFavFolder({
     required String sort,
   }) async {
-    Map<String, dynamic> data = {
-      'sort': sort,
-      'csrf': Accounts.main.csrf,
-    };
-    AppSign.appSign(data);
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       Api.sortFavFolder,
-      data: data,
+      data: {
+        'sort': sort,
+      },
       options: Options(
         contentType: Headers.formUrlEncodedContentType,
       ),
@@ -441,15 +434,12 @@ abstract final class FavHttp {
     required Object mediaId,
     required String sort,
   }) async {
-    Map<String, dynamic> data = {
-      'media_id': mediaId,
-      'sort': sort,
-      'csrf': Accounts.main.csrf,
-    };
-    AppSign.appSign(data);
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       Api.sortFav,
-      data: data,
+      data: {
+        'media_id': mediaId,
+        'sort': sort,
+      },
       options: Options(
         contentType: Headers.formUrlEncodedContentType,
       ),
@@ -464,12 +454,10 @@ abstract final class FavHttp {
   static Future<LoadingState<Null>> cleanFav({
     required Object mediaId,
   }) async {
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       Api.cleanFav,
       data: {
         'media_id': mediaId,
-        'platform': 'web',
-        'csrf': Accounts.main.csrf,
       },
       options: Options(
         contentType: Headers.formUrlEncodedContentType,
@@ -485,12 +473,10 @@ abstract final class FavHttp {
   static Future<LoadingState<Null>> deleteFolder({
     required String mediaIds,
   }) async {
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       Api.deleteFolder,
       data: {
         'media_ids': mediaIds,
-        'platform': 'web',
-        'csrf': Accounts.main.csrf,
       },
       options: Options(
         contentType: Headers.formUrlEncodedContentType,
@@ -511,14 +497,12 @@ abstract final class FavHttp {
     required String cover,
     required String intro,
   }) async {
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       isAdd ? Api.addFolder : Api.editFolder,
       data: {
         'title': title,
         'intro': intro,
-        'privacy': privacy,
         'cover': cover.isNotEmpty ? Uri.encodeFull(cover) : cover,
-        'csrf': Accounts.main.csrf,
         'media_id': ?mediaId,
       },
       options: Options(
@@ -535,7 +519,7 @@ abstract final class FavHttp {
   static Future<LoadingState<FavFolderInfo>> favFolderInfo({
     required Object mediaId,
   }) async {
-    final res = await Request().get(
+    final res = await SelfRequest().get(
       Api.favFolderInfo,
       queryParameters: {
         'media_id': mediaId,
@@ -635,13 +619,12 @@ abstract final class FavHttp {
     String? addIds,
     String? delIds,
   }) async {
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       Api.favVideo,
       data: {
         'resources': resources,
         'add_media_ids': addIds ?? '',
         'del_media_ids': delIds ?? '',
-        'csrf': Accounts.main.csrf,
       },
       options: Options(contentType: Headers.formUrlEncodedContentType),
     );
@@ -657,12 +640,11 @@ abstract final class FavHttp {
     required Object rid,
     required Object type,
   }) async {
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       Api.unfavAll,
       data: {
         'rid': rid,
         'type': type,
-        'csrf': Accounts.main.csrf,
       },
       options: Options(contentType: Headers.formUrlEncodedContentType),
     );
@@ -681,7 +663,7 @@ abstract final class FavHttp {
     dynamic mid,
     required String resources,
   }) async {
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       isFav
           ? isCopy
                 ? Api.copyFav
@@ -692,10 +674,7 @@ abstract final class FavHttp {
       data: {
         'src_media_id': ?srcMediaId,
         'tar_media_id': tarMediaId,
-        'mid': ?mid,
         'resources': resources,
-        'platform': 'web',
-        'csrf': Accounts.main.csrf,
       },
       options: Options(contentType: Headers.formUrlEncodedContentType),
     );
@@ -707,9 +686,8 @@ abstract final class FavHttp {
   }
 
   static Future<LoadingState<FavFolderData>> allFavFolders(Object mid) async {
-    final res = await Request().get(
+    final res = await SelfRequest().get(
       Api.favFolder,
-      queryParameters: {'up_mid': mid},
     );
     if (res.data['code'] == 0) {
       return Success(FavFolderData.fromJson(res.data['data']));
@@ -724,12 +702,10 @@ abstract final class FavHttp {
     dynamic rid,
     dynamic type,
   }) async {
-    final res = await Request().get(
+    final res = await SelfRequest().get(
       Api.favFolder,
       queryParameters: {
-        'up_mid': mid,
         'rid': rid,
-        'type': ?type,
       },
     );
     if (res.data['code'] == 0) {
