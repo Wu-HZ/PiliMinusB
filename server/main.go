@@ -17,7 +17,7 @@ func main() {
 
 	// Database
 	database.Init()
-	database.DB.AutoMigrate(&model.User{}, &model.WatchLater{}, &model.WatchHistory{}, &model.UserSettings{})
+	database.DB.AutoMigrate(&model.User{}, &model.WatchLater{}, &model.WatchHistory{}, &model.UserSettings{}, &model.FavFolder{}, &model.FavResource{})
 
 	// Router
 	r := gin.Default()
@@ -52,7 +52,28 @@ func main() {
 		api.POST("/x/v1/medialist/history", handler.MedialistHistory)
 		api.GET("/x/v2/history/progress", handler.HistoryProgress)
 
-		// Phase 3: Favorites    — will be added here
+		// Phase 3: Favorites — Folder Management
+		api.GET("/x/v3/fav/folder/created/list-all", handler.AllFavFolders)
+		api.GET("/x/v3/fav/folder/created/list", handler.ListFavFolders)
+		api.GET("/x/v3/fav/folder/info", handler.FavFolderInfo)
+		api.POST("/x/v3/fav/folder/add", handler.AddFavFolder)
+		api.POST("/x/v3/fav/folder/edit", handler.EditFavFolder)
+		api.POST("/x/v3/fav/folder/del", handler.DelFavFolder)
+		api.POST("/x/v3/fav/folder/sort", handler.SortFavFolder)
+
+		// Phase 3: Favorites — Resource Management
+		api.GET("/x/v3/fav/resource/list", handler.ListFavResources)
+		api.POST("/x/v3/fav/resource/batch-deal", handler.BatchDealFav)
+		api.POST("/x/v3/fav/resource/unfav-all", handler.UnfavAll)
+		api.POST("/x/v3/fav/resource/copy", handler.CopyFavResource)
+		api.POST("/x/v3/fav/resource/move", handler.MoveFavResource)
+		api.POST("/x/v3/fav/resource/clean", handler.CleanFavResource)
+		api.POST("/x/v3/fav/resource/sort", handler.SortFavResource)
+
+		// Phase 3: Watch Later ↔ Favorites Cross-Operations
+		api.POST("/x/v2/history/toview/copy", handler.ToviewCopy)
+		api.POST("/x/v2/history/toview/move", handler.ToviewMove)
+
 		// Phase 4: Follow       — will be added here
 	}
 
