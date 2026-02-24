@@ -21,6 +21,15 @@ func Success(c *gin.Context, data interface{}) {
 	})
 }
 
+// PgcSuccess mirrors the PGC API format which uses "result" instead of "data".
+func PgcSuccess(c *gin.Context, result interface{}) {
+	c.JSON(http.StatusOK, gin.H{
+		"code":    0,
+		"message": "success",
+		"result":  result,
+	})
+}
+
 func Error(c *gin.Context, httpStatus int, code int, message string) {
 	c.JSON(httpStatus, BiliResponse{
 		Code:    code,

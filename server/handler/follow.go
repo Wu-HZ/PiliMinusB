@@ -485,7 +485,7 @@ func PgcAdd(c *gin.Context) {
 		database.DB.Create(&b)
 	}
 
-	response.Success(c, gin.H{
+	response.PgcSuccess(c, gin.H{
 		"toast": "追番成功",
 	})
 }
@@ -507,7 +507,7 @@ func PgcDel(c *gin.Context) {
 	database.DB.Where("user_id = ? AND season_id = ?", userID, seasonID).
 		Delete(&model.BangumiFollow{})
 
-	response.Success(c, gin.H{
+	response.PgcSuccess(c, gin.H{
 		"toast": "已取消追番",
 	})
 }
@@ -533,7 +533,7 @@ func PgcUpdate(c *gin.Context) {
 		Where("user_id = ? AND season_id = ?", userID, seasonID).
 		Update("follow_status", status)
 
-	response.Success(c, gin.H{
+	response.PgcSuccess(c, gin.H{
 		"toast": "状态更新成功",
 	})
 }

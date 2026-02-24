@@ -5,6 +5,7 @@ import 'package:PiliPlus/http/api.dart';
 import 'package:PiliPlus/http/constants.dart';
 import 'package:PiliPlus/http/init.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/http/self_request.dart';
 import 'package:PiliPlus/http/ua_type.dart';
 import 'package:PiliPlus/models/common/member/contribute_type.dart';
 import 'package:PiliPlus/models/dynamics/result.dart';
@@ -470,7 +471,7 @@ abstract final class MemberHttp {
 
   // 查询分组
   static Future<LoadingState<List<MemberTagItemModel>>> followUpTags() async {
-    final res = await Request().get(Api.followUpTag);
+    final res = await SelfRequest().get(Api.followUpTag);
     if (res.data['code'] == 0) {
       return Success(
         (res.data['data'] as List)
@@ -486,11 +487,10 @@ abstract final class MemberHttp {
     int? fid,
     bool isAdd = true,
   }) async {
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       isAdd ? Api.addSpecial : Api.delSpecial,
       data: {
         'fid': fid,
-        'csrf': Accounts.main.csrf,
       },
       options: Options(contentType: Headers.formUrlEncodedContentType),
     );
@@ -503,17 +503,11 @@ abstract final class MemberHttp {
 
   // 设置分组
   static Future<LoadingState<Null>> addUsers(String fids, String tagids) async {
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       Api.addUsers,
-      queryParameters: {
-        'x-bili-device-req-json':
-            '{"platform":"web","device":"pc","spmid":"333.1387"}',
-      },
       data: {
         'fids': fids,
         'tagids': tagids,
-        'csrf': Accounts.main.csrf,
-        // 'cross_domain': true
       },
       options: Options(contentType: Headers.formUrlEncodedContentType),
     );
@@ -531,10 +525,9 @@ abstract final class MemberHttp {
     int? pn,
     int ps = 20,
   }) async {
-    final res = await Request().get(
+    final res = await SelfRequest().get(
       Api.followUpGroup,
       queryParameters: {
-        'mid': mid,
         'tagid': tagid,
         'pn': pn,
         'ps': ps,
@@ -556,15 +549,10 @@ abstract final class MemberHttp {
   }
 
   static Future<LoadingState<Null>> createFollowTag(Object tagName) async {
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       Api.createFollowTag,
-      queryParameters: {
-        'x-bili-device-req-json':
-            '{"platform":"web","device":"pc","spmid":"333.1387"}',
-      },
       data: {
         'tag': tagName,
-        'csrf': Accounts.main.csrf,
       },
       options: Options(contentType: Headers.formUrlEncodedContentType),
     );
@@ -579,16 +567,11 @@ abstract final class MemberHttp {
     Object tagid,
     Object name,
   ) async {
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       Api.updateFollowTag,
-      queryParameters: {
-        'x-bili-device-req-json':
-            '{"platform":"web","device":"pc","spmid":"333.1387"}',
-      },
       data: {
         'tagid': tagid,
         'name': name,
-        'csrf': Accounts.main.csrf,
       },
       options: Options(contentType: Headers.formUrlEncodedContentType),
     );
@@ -600,15 +583,10 @@ abstract final class MemberHttp {
   }
 
   static Future<LoadingState<Null>> delFollowTag(Object tagid) async {
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       Api.delFollowTag,
-      queryParameters: {
-        'x-bili-device-req-json':
-            '{"platform":"web","device":"pc","spmid":"333.1387"}',
-      },
       data: {
         'tagid': tagid,
-        'csrf': Accounts.main.csrf,
       },
       options: Options(contentType: Headers.formUrlEncodedContentType),
     );
@@ -653,23 +631,12 @@ abstract final class MemberHttp {
     required int pn,
     required String name,
   }) async {
-    final data = {
-      'vmid': mid,
-      'pn': pn,
-      'ps': ps,
-      'order': 'desc',
-      'order_type': 'attention',
-      'gaia_source': 'main_web',
-      'name': name,
-      'web_location': 333.999,
-    };
-    Map params = await WbiSign.makSign(data);
-    final res = await Request().get(
+    final res = await SelfRequest().get(
       Api.followSearch,
       queryParameters: {
-        ...data,
-        'w_rid': params['w_rid'],
-        'wts': params['wts'],
+        'pn': pn,
+        'ps': ps,
+        'name': name,
       },
     );
     if (res.data['code'] == 0) {

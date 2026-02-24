@@ -375,10 +375,9 @@ abstract final class FavHttp {
     int? followStatus,
     Object? mid,
   }) async {
-    final res = await Request().get(
+    final res = await SelfRequest().get(
       Api.favPgc,
       queryParameters: {
-        'vmid': mid ?? Accounts.main.mid,
         'type': type,
         'follow_status': ?followStatus,
         'pn': pn,

@@ -619,33 +619,15 @@ abstract final class VideoHttp {
     required int act,
     required int reSrc,
   }) async {
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       Api.relationMod,
-      queryParameters: {
-        'statistics': '{"appId":100,"platform":5}',
-        'x-bili-device-req-json':
-            '{"platform":"web","device":"pc","spmid":"333.1387"}',
-      },
       data: {
         'fid': mid,
         'act': act,
         're_src': reSrc,
-        'gaia_source': 'web_main',
-        'spmid': '333.1387',
-        'extend_content': jsonEncode({
-          "entity": "user",
-          "entity_id": mid,
-          'fp': UaType.pc.ua,
-        }),
-        'csrf': Accounts.main.csrf,
       },
       options: Options(
         contentType: Headers.formUrlEncodedContentType,
-        headers: {
-          'origin': 'https://space.bilibili.com',
-          'referer': 'https://space.bilibili.com/$mid/dynamic',
-          'user-agent': UaType.pc.ua,
-        },
       ),
     );
     if (res.data['code'] == 0) {
@@ -736,11 +718,10 @@ abstract final class VideoHttp {
 
   // 添加追番
   static Future<LoadingState<String>> pgcAdd({int? seasonId}) async {
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       Api.pgcAdd,
       data: {
         'season_id': seasonId,
-        'csrf': Accounts.main.csrf,
       },
       options: Options(contentType: Headers.formUrlEncodedContentType),
     );
@@ -753,11 +734,10 @@ abstract final class VideoHttp {
 
   // 取消追番
   static Future<LoadingState<String>> pgcDel({int? seasonId}) async {
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       Api.pgcDel,
       data: {
         'season_id': seasonId,
-        'csrf': Accounts.main.csrf,
       },
       options: Options(contentType: Headers.formUrlEncodedContentType),
     );
@@ -772,12 +752,11 @@ abstract final class VideoHttp {
     required String seasonId,
     required int status,
   }) async {
-    final res = await Request().post(
+    final res = await SelfRequest().post(
       Api.pgcUpdate,
       data: {
         'season_id': seasonId,
         'status': status,
-        'csrf': Accounts.main.csrf,
       },
       options: Options(
         contentType: Headers.formUrlEncodedContentType,
