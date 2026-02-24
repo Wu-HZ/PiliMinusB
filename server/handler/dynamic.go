@@ -108,6 +108,7 @@ func DynamicFeed(c *gin.Context) {
 	})
 
 	// Cursor-based pagination: skip items with pubdate >= offset
+	// offset="" means first page; a numeric offset skips older items.
 	var offsetTS int64
 	if offsetStr != "" {
 		offsetTS, _ = strconv.ParseInt(offsetStr, 10, 64)
@@ -128,8 +129,12 @@ func DynamicFeed(c *gin.Context) {
 	if hasMore {
 		page = page[:20]
 	}
+
+	// Always set a meaningful offset so the client can detect "end".
+	// If there are no more items, use the last item's pubdate as offset
+	// so the next request returns empty → client sets isEnd = true.
 	nextOffset := ""
-	if hasMore {
+	if len(page) > 0 {
 		nextOffset = strconv.FormatInt(page[len(page)-1].Pubdate, 10)
 	}
 
