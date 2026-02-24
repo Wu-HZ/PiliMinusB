@@ -213,9 +213,9 @@ func DynamicFeed(c *gin.Context) {
 					},
 				},
 				"module_stat": gin.H{
-					"like":    gin.H{"count": nil},
-					"comment": gin.H{"count": nil},
-					"forward": gin.H{"count": nil},
+					"like":    gin.H{"count": 0, "status": false},
+					"comment": gin.H{"count": 0},
+					"forward": gin.H{"count": 0},
 				},
 			},
 		})
