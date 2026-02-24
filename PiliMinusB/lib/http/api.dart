@@ -275,6 +275,8 @@ abstract final class Api {
 
   static const String historyReport = '/x/v2/history/report';
 
+  static const String historyProgress = '/x/v2/history/progress';
+
   static const String roomEntryAction =
       '${HttpString.liveBaseUrl}/xlive/web-room/v1/index/roomEntryAction';
 

@@ -248,6 +248,28 @@ abstract final class VideoHttp {
                   result?['play_view_business_info']?['user_status']?['watch_progress']?['current_watch_progress'];
             break;
         }
+
+        // Query self-hosted server for watch progress
+        if (SelfRequest.token != null) {
+          try {
+            final progRes = await SelfRequest().get(
+              Api.historyProgress,
+              queryParameters: {
+                if (avid != null) 'aid': avid,
+                if (bvid != null) 'bvid': bvid,
+              },
+            );
+            if (progRes.data['code'] == 0) {
+              final lastPlayTime = progRes.data['data']?['last_play_time'];
+              if (lastPlayTime is int && lastPlayTime > 0) {
+                data.lastPlayTime = lastPlayTime;
+                data.lastPlayCid =
+                    progRes.data['data']?['last_play_cid'] as int?;
+              }
+            }
+          } catch (_) {}
+        }
+
         return Success(data);
       } else if (epid != null && videoType == VideoType.ugc) {
         return videoUrl(

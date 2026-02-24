@@ -139,8 +139,8 @@ func SearchHistory(c *gin.Context) {
 	}
 
 	response.Success(c, gin.H{
-		"cursor":  cursorData,
-		"list":    list,
+		"cursor":   cursorData,
+		"list":     list,
 		"has_more": hasMore,
 		"page": gin.H{
 			"pn":    pn,
@@ -500,4 +500,47 @@ func MedialistHistory(c *gin.Context) {
 	}
 
 	response.Success(c, nil)
+}
+
+// ---------------------------------------------------------------------------
+// GET /x/v2/history/progress  — 查询指定视频的观看进度
+// ---------------------------------------------------------------------------
+
+func HistoryProgress(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+
+	aidStr := c.DefaultQuery("aid", "0")
+	bvid := c.DefaultQuery("bvid", "")
+
+	aid, _ := strconv.ParseInt(aidStr, 10, 64)
+
+	// Resolve bvid → aid if needed
+	if aid == 0 && bvid != "" {
+		if info, err := bilibili.FetchVideoInfo(0, bvid); err == nil && info != nil && info.Aid != 0 {
+			aid = info.Aid
+		}
+	}
+
+	if aid == 0 {
+		response.Success(c, gin.H{
+			"last_play_time": -1,
+			"last_play_cid":  0,
+		})
+		return
+	}
+
+	var entry model.WatchHistory
+	result := database.DB.Where("user_id = ? AND aid = ?", userID, aid).First(&entry)
+	if result.Error != nil {
+		response.Success(c, gin.H{
+			"last_play_time": -1,
+			"last_play_cid":  0,
+		})
+		return
+	}
+
+	response.Success(c, gin.H{
+		"last_play_time": entry.Progress * 1000, // seconds → milliseconds
+		"last_play_cid":  entry.Cid,
+	})
 }

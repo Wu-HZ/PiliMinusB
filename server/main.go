@@ -50,6 +50,7 @@ func main() {
 		api.POST("/x/click-interface/web/heartbeat", handler.HeartBeat)
 		api.POST("/x/v2/history/report", handler.HistoryReport)
 		api.POST("/x/v1/medialist/history", handler.MedialistHistory)
+		api.GET("/x/v2/history/progress", handler.HistoryProgress)
 
 		// Phase 3: Favorites    — will be added here
 		// Phase 4: Follow       — will be added here
