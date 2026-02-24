@@ -53,7 +53,7 @@ class MineController extends CommonDataController<FavFolderData, FavFolderData>
           icon: Icons.history,
           title: '观看记录',
           onTap: () {
-            if (isLogin) {
+            if (isLogin || SelfRequest.token != null) {
               Get.toNamed('/history');
             }
           },
