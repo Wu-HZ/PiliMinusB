@@ -2,6 +2,7 @@ import 'dart:async' show FutureOr, Timer;
 
 import 'package:PiliPlus/http/fav.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/http/self_request.dart';
 import 'package:PiliPlus/http/user.dart';
 import 'package:PiliPlus/http/video.dart';
 import 'package:PiliPlus/models/common/video/source_type.dart';
@@ -43,7 +44,7 @@ abstract class CommonIntroController extends GetxController
     }
   }
 
-  late final isLogin = Accounts.main.isLogin;
+  late final isLogin = Accounts.main.isLogin || SelfRequest.token != null;
 
   StatDetail? getStat();
 
@@ -201,7 +202,7 @@ mixin FavMixin on TripleMixin {
 
   // 收藏
   void showFavBottomSheet(BuildContext context, {bool isLongPress = false}) {
-    if (!Accounts.main.isLogin) {
+    if (!Accounts.main.isLogin && SelfRequest.token == null) {
       SmartDialog.showToast('账号未登录');
       return;
     }
