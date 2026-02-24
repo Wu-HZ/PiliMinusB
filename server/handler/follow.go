@@ -263,10 +263,6 @@ func FollowTagMembers(c *gin.Context) {
 
 	if tagID == -10 {
 		// Special follow virtual tag
-		var total int64
-		database.DB.Model(&model.Following{}).
-			Where("user_id = ? AND is_special = 1", userID).Count(&total)
-
 		var follows []model.Following
 		database.DB.Where("user_id = ? AND is_special = 1", userID).
 			Order("m_time DESC").Offset(offset).Limit(ps).Find(&follows)
@@ -276,10 +272,8 @@ func FollowTagMembers(c *gin.Context) {
 			list = append(list, f.ToBiliJSON())
 		}
 
-		response.Success(c, gin.H{
-			"list":  list,
-			"total": total,
-		})
+		// Client expects data to be a plain array
+		response.Success(c, list)
 		return
 	}
 
@@ -310,14 +304,8 @@ func FollowTagMembers(c *gin.Context) {
 		}
 	}
 
-	var total int64
-	database.DB.Model(&model.FollowTagMember{}).
-		Where("user_id = ? AND tag_id = ?", userID, tagID).Count(&total)
-
-	response.Success(c, gin.H{
-		"list":  list,
-		"total": total,
-	})
+	// Client expects data to be a plain array
+	response.Success(c, list)
 }
 
 // ---------------------------------------------------------------------------
