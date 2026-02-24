@@ -88,6 +88,8 @@ class MineController extends CommonDataController<FavFolderData, FavFolderData>
       userInfo.value = userInfoCache;
       queryData();
       queryUserInfo();
+    } else if (SelfRequest.token != null) {
+      queryData();
     }
   }
 
@@ -286,16 +288,20 @@ class MineController extends CommonDataController<FavFolderData, FavFolderData>
 
   @override
   Future<void> onRefresh() {
-    if (!accountService.isLogin.value) {
+    if (!accountService.isLogin.value && SelfRequest.token == null) {
       return Future.syncValue(null);
     }
-    queryUserInfo();
+    if (accountService.isLogin.value) {
+      queryUserInfo();
+    }
     return super.onRefresh();
   }
 
   @override
   void onChangeAccount(bool isLogin) {
     if (isLogin) {
+      onRefresh();
+    } else if (SelfRequest.token != null) {
       onRefresh();
     } else {
       userInfo.value = UserInfoData();
