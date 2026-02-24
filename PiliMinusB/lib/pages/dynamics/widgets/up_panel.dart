@@ -1,5 +1,6 @@
 import 'package:PiliPlus/common/widgets/flutter/dyn/ink_well.dart';
 import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
+import 'package:PiliPlus/http/self_request.dart';
 import 'package:PiliPlus/models/common/dynamic/up_panel_position.dart';
 import 'package:PiliPlus/models/common/image_type.dart';
 import 'package:PiliPlus/models/dynamics/up.dart';
@@ -34,7 +35,7 @@ class _UpPanelState extends State<UpPanel> {
   @override
   Widget build(BuildContext context) {
     final accountService = controller.accountService;
-    if (!accountService.isLogin.value) {
+    if (!accountService.isLogin.value && SelfRequest.token == null) {
       return const SizedBox.shrink();
     }
     final theme = Theme.of(context);
@@ -107,18 +108,19 @@ class _UpPanelState extends State<UpPanel> {
         SliverToBoxAdapter(
           child: upItemBuild(theme, UpItem(face: '', uname: '全部动态', mid: -1)),
         ),
-        SliverToBoxAdapter(
-          child: Obx(
-            () => upItemBuild(
-              theme,
-              UpItem(
-                uname: '我',
-                face: accountService.face.value,
-                mid: Accounts.main.mid,
+        if (accountService.isLogin.value)
+          SliverToBoxAdapter(
+            child: Obx(
+              () => upItemBuild(
+                theme,
+                UpItem(
+                  uname: '我',
+                  face: accountService.face.value,
+                  mid: Accounts.main.mid,
+                ),
               ),
             ),
           ),
-        ),
         if (upList.isNotEmpty)
           SliverList.builder(
             itemCount: upList.length,

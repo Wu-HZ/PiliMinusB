@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:PiliPlus/http/dynamics.dart';
 import 'package:PiliPlus/http/follow.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/http/self_request.dart';
 import 'package:PiliPlus/models/common/dynamic/dynamics_type.dart';
 import 'package:PiliPlus/models/dynamics/up.dart';
 import 'package:PiliPlus/models_new/follow/data.dart';
@@ -94,6 +95,7 @@ class DynamicsController extends GetxController
   }
 
   Future<void> queryAllUp() async {
+    if (!accountService.isLogin.value) return;
     if (isQuerying || _upEnd) return;
     isQuerying = true;
 
@@ -125,7 +127,7 @@ class DynamicsController extends GetxController
     if (isQuerying) return;
     isQuerying = true;
 
-    if (!accountService.isLogin.value) {
+    if (!accountService.isLogin.value && SelfRequest.token == null) {
       upState.value = const Error(null);
       isQuerying = false;
       return;
@@ -137,7 +139,7 @@ class DynamicsController extends GetxController
 
     final res = await Future.wait([
       DynamicsHttp.followUp(),
-      if (_showAllUp)
+      if (_showAllUp && accountService.isLogin.value)
         FollowHttp.followings(
           vmid: Accounts.main.mid,
           pn: _upPage,

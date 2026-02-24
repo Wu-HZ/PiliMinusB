@@ -4,6 +4,7 @@ import 'package:PiliPlus/common/widgets/pair.dart';
 import 'package:PiliPlus/http/api.dart';
 import 'package:PiliPlus/http/constants.dart';
 import 'package:PiliPlus/http/init.dart';
+import 'package:PiliPlus/http/self_request.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/http/reply.dart';
 import 'package:PiliPlus/models/common/dynamic/dynamics_type.dart';
@@ -45,7 +46,9 @@ abstract final class DynamicsHttp {
       'offset': offset,
       'features': 'itemOpusStyle,listOnlyfans',
     };
-    final res = await Request().get(Api.followDynamic, queryParameters: data);
+    final res = await (SelfRequest.token != null
+        ? SelfRequest().get(Api.followDynamic, queryParameters: data)
+        : Request().get(Api.followDynamic, queryParameters: data));
     final code = res.data['code'];
     if (code == 0) {
       try {
@@ -72,13 +75,15 @@ abstract final class DynamicsHttp {
   }
 
   static Future<LoadingState<FollowUpModel>> followUp() async {
-    final res = await Request().get(
-      Api.followUp,
-      queryParameters: {
-        'up_list_more': 1,
-        'web_location': 333.1365,
-      },
-    );
+    final res = await (SelfRequest.token != null
+        ? SelfRequest().get(Api.followUp)
+        : Request().get(
+            Api.followUp,
+            queryParameters: {
+              'up_list_more': 1,
+              'web_location': 333.1365,
+            },
+          ));
     if (res.data['code'] == 0) {
       return Success(FollowUpModel.fromJson(res.data['data']));
     } else {
@@ -87,14 +92,16 @@ abstract final class DynamicsHttp {
   }
 
   static Future<LoadingState<DynUpList>> dynUpList(String? offset) async {
-    final res = await Request().get(
-      Api.dynUplist,
-      queryParameters: {
-        'offset': offset,
-        'platform': 'web',
-        'web_location': 333.1365,
-      },
-    );
+    final res = await (SelfRequest.token != null
+        ? SelfRequest().get(Api.dynUplist)
+        : Request().get(
+            Api.dynUplist,
+            queryParameters: {
+              'offset': offset,
+              'platform': 'web',
+              'web_location': 333.1365,
+            },
+          ));
     if (res.data['code'] == 0) {
       return Success(DynUpList.fromJson(res.data['data']));
     } else {

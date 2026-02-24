@@ -93,6 +93,10 @@ func main() {
 		api.POST("/pgc/web/follow/add", handler.PgcAdd)
 		api.POST("/pgc/web/follow/del", handler.PgcDel)
 		api.POST("/pgc/web/follow/status/update", handler.PgcUpdate)
+
+		// Phase 5: Dynamics Feed
+		api.GET("/x/polymer/web-dynamic/v1/feed/all", handler.DynamicFeed)
+		api.GET("/x/polymer/web-dynamic/v1/portal", handler.DynamicPortal)
 	}
 
 	log.Printf("PiliMinusB server starting on :%s", cfg.Server.Port)
