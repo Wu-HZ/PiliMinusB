@@ -119,14 +119,17 @@ func DynamicFeed(c *gin.Context) {
 			continue
 		}
 		page = append(page, v)
-		if len(page) >= 20 {
+		if len(page) > 20 {
 			break
 		}
 	}
 
-	hasMore := len(page) == 20
+	hasMore := len(page) > 20
+	if hasMore {
+		page = page[:20]
+	}
 	nextOffset := ""
-	if hasMore && len(page) > 0 {
+	if hasMore {
 		nextOffset = strconv.FormatInt(page[len(page)-1].Pubdate, 10)
 	}
 
