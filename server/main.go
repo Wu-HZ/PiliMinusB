@@ -17,7 +17,7 @@ func main() {
 
 	// Database
 	database.Init()
-	database.DB.AutoMigrate(&model.User{}, &model.WatchLater{}, &model.WatchHistory{}, &model.UserSettings{}, &model.FavFolder{}, &model.FavResource{})
+	database.DB.AutoMigrate(&model.User{}, &model.WatchLater{}, &model.WatchHistory{}, &model.UserSettings{}, &model.FavFolder{}, &model.FavResource{}, &model.Following{}, &model.FollowTag{}, &model.FollowTagMember{}, &model.BangumiFollow{})
 
 	// Router
 	r := gin.Default()
@@ -74,7 +74,24 @@ func main() {
 		api.POST("/x/v2/history/toview/copy", handler.ToviewCopy)
 		api.POST("/x/v2/history/toview/move", handler.ToviewMove)
 
-		// Phase 4: Follow       — will be added here
+		// Phase 4: Following Management
+		api.GET("/x/relation/followings", handler.Followings)
+		api.GET("/x/relation/followings/search", handler.FollowingsSearch)
+		api.POST("/x/relation/modify", handler.RelationMod)
+		api.GET("/x/relation/tags", handler.FollowTags)
+		api.GET("/x/relation/tag", handler.FollowTagMembers)
+		api.POST("/x/relation/tag/create", handler.CreateFollowTag)
+		api.POST("/x/relation/tag/update", handler.UpdateFollowTag)
+		api.POST("/x/relation/tag/del", handler.DelFollowTag)
+		api.POST("/x/relation/tags/addUsers", handler.AddUsersToTag)
+		api.POST("/x/relation/tag/special/add", handler.AddSpecial)
+		api.POST("/x/relation/tag/special/del", handler.DelSpecial)
+
+		// Phase 4: Bangumi Follow
+		api.GET("/x/space/bangumi/follow/list", handler.BangumiFollowList)
+		api.POST("/pgc/web/follow/add", handler.PgcAdd)
+		api.POST("/pgc/web/follow/del", handler.PgcDel)
+		api.POST("/pgc/web/follow/status/update", handler.PgcUpdate)
 	}
 
 	log.Printf("PiliMinusB server starting on :%s", cfg.Server.Port)
