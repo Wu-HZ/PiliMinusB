@@ -39,6 +39,18 @@ class _UpPanelState extends State<UpPanel> {
       return const SizedBox.shrink();
     }
     final theme = Theme.of(context);
+
+    // Self-server users: dual-column/row layout
+    if (SelfRequest.token != null) {
+      return _buildDualLayout(theme);
+    }
+
+    // Bilibili login users: original single-column layout
+    return _buildOriginalLayout(theme);
+  }
+
+  Widget _buildOriginalLayout(ThemeData theme) {
+    final accountService = controller.accountService;
     final upData = controller.upState.value.data;
     final List<UpItem> upList = upData.upList;
     final List<LiveUserItem>? liveList = upData.liveUsers?.items;
@@ -131,6 +143,219 @@ class _UpPanelState extends State<UpPanel> {
         if (!isTop) const SliverToBoxAdapter(child: SizedBox(height: 200)),
       ],
     );
+  }
+
+  Widget _buildDualLayout(ThemeData theme) {
+    if (isTop) {
+      return _buildDualLayoutTop(theme);
+    }
+    return _buildDualLayoutSide(theme);
+  }
+
+  Widget _tagItemBuild(
+    ThemeData theme, {
+    required String label,
+    required int tagId,
+    required bool selected,
+  }) {
+    final isAll = tagId == 0;
+    Widget avatar;
+    if (isAll) {
+      avatar = DecoratedBox(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            width: 5,
+            color: const Color(0xFF5CB67B),
+          ),
+        ),
+        child: Image.asset(
+          width: 38,
+          height: 38,
+          cacheWidth: 38.cacheSize(context),
+          'assets/images/logo/logo.png',
+        ),
+      );
+    } else {
+      avatar = Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: selected
+              ? theme.colorScheme.primaryContainer
+              : theme.colorScheme.surfaceContainerHighest,
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label.characters.first,
+          style: TextStyle(
+            fontSize: 16,
+            color: selected
+                ? theme.colorScheme.onPrimaryContainer
+                : theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 76,
+      width: isTop ? 70 : null,
+      child: InkWell(
+        onTap: () {
+          feedBack();
+          controller.onSelectTag(tagId);
+          setState(() {});
+        },
+        child: Opacity(
+          opacity: selected ? 1 : 0.6,
+          child: Column(
+            spacing: 4,
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              avatar,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  isTop ? '$label\n' : label,
+                  maxLines: 2,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: selected
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.outline,
+                    height: 1.1,
+                    fontSize: 12.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Side mode: left-right two columns
+  Widget _buildDualLayoutSide(ThemeData theme) {
+    return Obx(() {
+      final selectedTagId = controller.selectedTagId.value;
+      final tags = controller.followTags;
+      final upList = controller.tagUpList;
+
+      return Row(
+        children: [
+          // Column 1: Tag groups
+          SizedBox(
+            width: 64,
+            child: ListView.builder(
+              padding: const EdgeInsets.only(top: 4),
+              itemCount: tags.length + 1,
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  return _tagItemBuild(
+                    theme,
+                    label: '全部',
+                    tagId: 0,
+                    selected: selectedTagId == 0,
+                  );
+                }
+                final tag = tags[index - 1];
+                return _tagItemBuild(
+                  theme,
+                  label: tag.name ?? '',
+                  tagId: tag.tagid ?? 0,
+                  selected: selectedTagId == tag.tagid,
+                );
+              },
+            ),
+          ),
+          // Column 2: UP list
+          Expanded(
+            child: NotificationListener<ScrollEndNotification>(
+              onNotification: (notification) {
+                final metrics = notification.metrics;
+                if (metrics.pixels >= metrics.maxScrollExtent - 300) {
+                  controller.onLoadMoreUp();
+                }
+                return false;
+              },
+              child: ListView.builder(
+                controller: controller.scrollController,
+                padding: const EdgeInsets.only(top: 4, bottom: 200),
+                itemCount: upList.length,
+                itemBuilder: (context, index) {
+                  return upItemBuild(theme, upList[index]);
+                },
+              ),
+            ),
+          ),
+        ],
+      );
+    });
+  }
+
+  // Top mode: top-bottom two rows
+  Widget _buildDualLayoutTop(ThemeData theme) {
+    return Obx(() {
+      final selectedTagId = controller.selectedTagId.value;
+      final tags = controller.followTags;
+      final upList = controller.tagUpList;
+
+      return Column(
+        children: [
+          // Row 1: Tag groups (horizontal)
+          SizedBox(
+            height: 76,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.only(left: 8),
+              itemCount: tags.length + 1,
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  return _tagItemBuild(
+                    theme,
+                    label: '全部',
+                    tagId: 0,
+                    selected: selectedTagId == 0,
+                  );
+                }
+                final tag = tags[index - 1];
+                return _tagItemBuild(
+                  theme,
+                  label: tag.name ?? '',
+                  tagId: tag.tagid ?? 0,
+                  selected: selectedTagId == tag.tagid,
+                );
+              },
+            ),
+          ),
+          // Row 2: UP list (horizontal)
+          Expanded(
+            child: NotificationListener<ScrollEndNotification>(
+              onNotification: (notification) {
+                final metrics = notification.metrics;
+                if (metrics.pixels >= metrics.maxScrollExtent - 300) {
+                  controller.onLoadMoreUp();
+                }
+                return false;
+              },
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                controller: controller.scrollController,
+                padding: const EdgeInsets.only(left: 4),
+                itemCount: upList.length,
+                itemBuilder: (context, index) {
+                  return upItemBuild(theme, upList[index]);
+                },
+              ),
+            ),
+          ),
+        ],
+      );
+    });
   }
 
   void _onSelect(UpItem data) {

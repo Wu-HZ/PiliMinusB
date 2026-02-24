@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:PiliPlus/http/dynamics.dart';
 import 'package:PiliPlus/http/follow.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/http/member.dart';
 import 'package:PiliPlus/http/self_request.dart';
 import 'package:PiliPlus/models/common/dynamic/dynamics_type.dart';
 import 'package:PiliPlus/models/dynamics/up.dart';
+import 'package:PiliPlus/models/member/tags.dart';
 import 'package:PiliPlus/models_new/follow/data.dart';
 import 'package:PiliPlus/pages/common/common_controller.dart';
 import 'package:PiliPlus/pages/dynamics_tab/controller.dart';
@@ -38,6 +40,12 @@ class DynamicsController extends GetxController
   late bool showLiveUp = Pref.expandDynLivePanel;
 
   final upPanelPosition = Pref.upPanelPosition;
+
+  // Tag-based UP grouping (self-server users only)
+  final RxList<MemberTagItemModel> followTags = <MemberTagItemModel>[].obs;
+  final RxInt selectedTagId = 0.obs; // 0 = 全部
+  final RxList<UpItem> tagUpList = <UpItem>[].obs;
+  Set<int>? filterMids; // non-null = filter dynamics by these UP mids
 
   @override
   final AccountService accountService = Get.find<AccountService>();
@@ -170,11 +178,53 @@ class DynamicsController extends GetxController
         }
       }
       upState.value = Success(data);
+      queryFollowTags();
     } else {
       upState.value = const Error(null);
     }
 
     isQuerying = false;
+  }
+
+  Future<void> queryFollowTags() async {
+    if (SelfRequest.token == null) return;
+    final res = await MemberHttp.followUpTags();
+    if (res case Success(:final response)) {
+      followTags.value = response;
+      // Initialize tagUpList with all UPs
+      _syncTagUpListAll();
+    }
+  }
+
+  void _syncTagUpListAll() {
+    final data = upState.value;
+    if (data case Success<FollowUpModel>()) {
+      tagUpList.value = List<UpItem>.from(data.response.upList);
+    }
+  }
+
+  Future<void> onSelectTag(int tagId) async {
+    selectedTagId.value = tagId;
+    currentMid = -1;
+    mid.value = -1;
+
+    if (tagId == 0) {
+      filterMids = null;
+      _syncTagUpListAll();
+    } else {
+      final res = await MemberHttp.followUpGroup(tagid: tagId, ps: 50);
+      if (res case Success(:final response)) {
+        final ups = response.list.cast<UpItem>();
+        tagUpList.value = ups;
+        filterMids = ups.map((e) => e.mid).toSet();
+      }
+    }
+
+    // Reload dynamics feed with updated filterMids
+    tabController.index = 0;
+    controller
+      ?..mid = null
+      ..onReload();
   }
 
   void onSelectUp(int mid) {

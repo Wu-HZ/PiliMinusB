@@ -39,7 +39,14 @@ class DynamicsTabController
   @override
   List<DynamicItemModel>? getDataList(DynamicsDataModel response) {
     offset = response.offset ?? '';
-    return response.items;
+    final items = response.items;
+    final filterMids = dynamicsController.filterMids;
+    if (filterMids != null && items != null) {
+      items.retainWhere(
+        (item) => filterMids.contains(item.modules.moduleAuthor?.mid),
+      );
+    }
+    return items;
   }
 
   @override

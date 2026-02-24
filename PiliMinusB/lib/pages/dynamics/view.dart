@@ -1,5 +1,6 @@
 import 'package:PiliPlus/common/widgets/scroll_physics.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/http/self_request.dart';
 import 'package:PiliPlus/models/common/dynamic/dynamics_type.dart';
 import 'package:PiliPlus/models/common/dynamic/up_panel_position.dart';
 import 'package:PiliPlus/models/dynamics/up.dart';
@@ -56,12 +57,13 @@ class _DynamicsPageState extends State<DynamicsPage>
   Widget upPanelPart(ThemeData theme) {
     bool isTop = upPanelPosition == UpPanelPosition.top;
     bool needBg = upPanelPosition.index > 1;
+    bool isSelfServer = SelfRequest.token != null;
     return Material(
       color: needBg ? theme.colorScheme.surface : null,
       type: needBg ? MaterialType.canvas : MaterialType.transparency,
       child: SizedBox(
-        width: isTop ? null : 64,
-        height: isTop ? 76 : null,
+        width: isTop ? null : (isSelfServer ? 130 : 64),
+        height: isTop ? (isSelfServer ? 156 : 76) : null,
         child: NotificationListener<ScrollEndNotification>(
           onNotification: (notification) {
             final metrics = notification.metrics;
