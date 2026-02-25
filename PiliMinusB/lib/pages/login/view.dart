@@ -45,6 +45,7 @@ class _LoginPageState extends State<LoginPage> {
   void dispose() {
     _selfUsernameController.dispose();
     _selfPasswordController.dispose();
+    _selfUrlController.dispose();
     super.dispose();
   }
 
@@ -628,6 +629,8 @@ class _LoginPageState extends State<LoginPage> {
 
   final TextEditingController _selfUsernameController = TextEditingController();
   final TextEditingController _selfPasswordController = TextEditingController();
+  late final TextEditingController _selfUrlController =
+      TextEditingController(text: SelfRequest.baseUrl);
 
   Widget loginBySelfServer(ThemeData theme) {
     return Column(
@@ -637,6 +640,23 @@ class _LoginPageState extends State<LoginPage> {
           SelfRequest.token != null ? '自建服务器（已登录）' : '登录自建服务器',
         ),
         const SizedBox(height: 10),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          child: TextField(
+            controller: _selfUrlController,
+            keyboardType: TextInputType.url,
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.dns_outlined),
+              border: const UnderlineInputBorder(),
+              labelText: '服务器地址',
+              hintText: 'http://127.0.0.1:8091',
+              suffixIcon: IconButton(
+                onPressed: _selfUrlController.clear,
+                icon: const Icon(Icons.clear),
+              ),
+            ),
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           child: TextField(
@@ -675,12 +695,18 @@ class _LoginPageState extends State<LoginPage> {
           children: [
             OutlinedButton.icon(
               onPressed: () async {
+                final url = _selfUrlController.text.trim();
+                if (url.isEmpty) {
+                  SmartDialog.showToast('服务器地址不能为空');
+                  return;
+                }
                 final u = _selfUsernameController.text.trim();
                 final p = _selfPasswordController.text;
                 if (u.isEmpty || p.isEmpty) {
                   SmartDialog.showToast('用户名或密码不能为空');
                   return;
                 }
+                SelfRequest.setBaseUrl(url);
                 SmartDialog.showLoading();
                 final res = await SelfRequest.register(u, p);
                 SmartDialog.dismiss();
@@ -692,12 +718,18 @@ class _LoginPageState extends State<LoginPage> {
             const SizedBox(width: 16),
             OutlinedButton.icon(
               onPressed: () async {
+                final url = _selfUrlController.text.trim();
+                if (url.isEmpty) {
+                  SmartDialog.showToast('服务器地址不能为空');
+                  return;
+                }
                 final u = _selfUsernameController.text.trim();
                 final p = _selfPasswordController.text;
                 if (u.isEmpty || p.isEmpty) {
                   SmartDialog.showToast('用户名或密码不能为空');
                   return;
                 }
+                SelfRequest.setBaseUrl(url);
                 SmartDialog.showLoading();
                 final res = await SelfRequest.login(u, p);
                 SmartDialog.dismiss();
@@ -730,7 +762,7 @@ class _LoginPageState extends State<LoginPage> {
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Text(
             '连接至 PiliMinusB 自建服务器。\n'
-            '注册后请登录以获取访问令牌。',
+            '输入服务器地址后注册或登录以获取访问令牌。',
             textAlign: TextAlign.center,
             style: theme.textTheme.labelSmall!.copyWith(
               color: theme.colorScheme.onSurface.withValues(alpha: 0.4),

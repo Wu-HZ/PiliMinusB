@@ -13,6 +13,22 @@ class SelfRequest {
 
   factory SelfRequest() => _instance;
 
+  /// Base URL for the self-hosted server. Defaults to [HttpString.selfBaseUrl].
+  static String _baseUrl = HttpString.selfBaseUrl;
+
+  static String get baseUrl => _baseUrl;
+
+  static void setBaseUrl(String url) {
+    _baseUrl = url;
+    GStorage.setting.put('selfBaseUrl', url);
+    dio.options.baseUrl = url;
+  }
+
+  static void loadBaseUrl() {
+    _baseUrl =
+        GStorage.setting.get('selfBaseUrl') as String? ?? HttpString.selfBaseUrl;
+  }
+
   /// JWT token stored locally. Set after login.
   static String? _token;
 
@@ -33,7 +49,7 @@ class SelfRequest {
 
   SelfRequest._internal() {
     BaseOptions options = BaseOptions(
-      baseUrl: HttpString.selfBaseUrl,
+      baseUrl: _baseUrl,
       connectTimeout: const Duration(milliseconds: 10000),
       receiveTimeout: const Duration(milliseconds: 10000),
       headers: {

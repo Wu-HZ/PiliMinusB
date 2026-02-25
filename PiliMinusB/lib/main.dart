@@ -129,6 +129,7 @@ void main() async {
 
   Request();
   Request.setCookie();
+  SelfRequest.loadBaseUrl();
   SelfRequest();
   SelfRequest.loadToken();
   RequestUtils.syncHistoryStatus();
