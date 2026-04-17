@@ -81,21 +81,23 @@ func (s *HTTPServer) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer cleanup()
+	chunkDurationMS := parseChunkDurationMS(r)
+	firstChunkDurationMS := parseFirstChunkDurationMS(r, chunkDurationMS)
 	if stat, statErr := os.Stat(filePath); statErr == nil {
 		log.Printf(
-			"received transcribe upload: filename=%s temp=%s size=%d progressive=%t chunk_ms=%d",
+			"received transcribe upload: filename=%s temp=%s size=%d progressive=%t first_chunk_ms=%d chunk_ms=%d",
 			fileName,
 			filePath,
 			stat.Size(),
 			isProgressiveTranscribe(r),
-			parseChunkDurationMS(r),
+			firstChunkDurationMS,
+			chunkDurationMS,
 		)
 	}
 
 	startedAt := time.Now()
 	ctx, cancel := context.WithTimeout(r.Context(), s.timeout)
 	defer cancel()
-	chunkDurationMS := parseChunkDurationMS(r)
 
 	if isProgressiveTranscribe(r) {
 		flusher, ok := w.(http.Flusher)
@@ -107,7 +109,7 @@ func (s *HTTPServer) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("X-Accel-Buffering", "no")
 
-		result, err := s.transcribeByChunks(ctx, filePath, chunkDurationMS, func(event transcribeProgressEvent) error {
+		result, err := s.transcribeByChunks(ctx, filePath, firstChunkDurationMS, chunkDurationMS, func(event transcribeProgressEvent) error {
 			event.Filename = fileName
 			return writeNDJSON(w, flusher, event)
 		})
@@ -130,7 +132,7 @@ func (s *HTTPServer) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := s.transcribeByChunks(ctx, filePath, chunkDurationMS, nil)
+	result, err := s.transcribeByChunks(ctx, filePath, firstChunkDurationMS, chunkDurationMS, nil)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: err.Error()})
 		return

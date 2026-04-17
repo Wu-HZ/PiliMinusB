@@ -16,6 +16,7 @@ import (
 )
 
 const defaultTranscribeChunkDurationMS = 5 * 60 * 1000
+const defaultFirstTranscribeChunkDurationMS = 2 * 60 * 1000
 
 type transcribeProgressEvent struct {
 	Type        string               `json:"type"`
@@ -43,6 +44,18 @@ func parseChunkDurationMS(r *http.Request) int {
 	return defaultTranscribeChunkDurationMS
 }
 
+func parseFirstChunkDurationMS(r *http.Request, chunkDurationMS int) int {
+	if value := strings.TrimSpace(r.URL.Query().Get("first_chunk_ms")); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
+			return parsed
+		}
+	}
+	if chunkDurationMS > 0 {
+		return minInt(defaultFirstTranscribeChunkDurationMS, chunkDurationMS)
+	}
+	return defaultFirstTranscribeChunkDurationMS
+}
+
 func isProgressiveTranscribe(r *http.Request) bool {
 	switch strings.ToLower(strings.TrimSpace(r.URL.Query().Get("progressive"))) {
 	case "1", "true", "yes", "on":
@@ -55,6 +68,7 @@ func isProgressiveTranscribe(r *http.Request) bool {
 func (s *HTTPServer) transcribeByChunks(
 	ctx context.Context,
 	filePath string,
+	firstChunkDurationMS int,
 	chunkDurationMS int,
 	onChunk func(event transcribeProgressEvent) error,
 ) (*client.Transcript, error) {
@@ -71,7 +85,7 @@ func (s *HTTPServer) transcribeByChunks(
 		audio.Channel,
 	)
 
-	chunks, err := splitAudioChunks(audio, chunkDurationMS)
+	chunks, err := splitAudioChunks(audio, firstChunkDurationMS, chunkDurationMS)
 	if err != nil {
 		return nil, err
 	}
@@ -158,12 +172,15 @@ func (s *HTTPServer) transcribeByChunks(
 	return result, nil
 }
 
-func splitAudioChunks(audio *common.AudioData, chunkDurationMS int) ([]audioChunk, error) {
+func splitAudioChunks(audio *common.AudioData, firstChunkDurationMS int, chunkDurationMS int) ([]audioChunk, error) {
 	if audio == nil {
 		return nil, fmt.Errorf("audio is empty")
 	}
 	if chunkDurationMS <= 0 {
 		chunkDurationMS = defaultTranscribeChunkDurationMS
+	}
+	if firstChunkDurationMS <= 0 {
+		firstChunkDurationMS = minInt(defaultFirstTranscribeChunkDurationMS, chunkDurationMS)
 	}
 
 	frameSize := audio.Channel * (audio.Bits / 8)
@@ -172,15 +189,24 @@ func splitAudioChunks(audio *common.AudioData, chunkDurationMS int) ([]audioChun
 	}
 
 	bytesPerSecond := audio.Rate * frameSize
-	chunkSize := bytesPerSecond * chunkDurationMS / 1000
-	chunkSize -= chunkSize % frameSize
-	if chunkSize <= 0 {
-		chunkSize = len(audio.PCM)
+	regularChunkSize := bytesPerSecond * chunkDurationMS / 1000
+	regularChunkSize -= regularChunkSize % frameSize
+	if regularChunkSize <= 0 {
+		regularChunkSize = len(audio.PCM)
+	}
+	firstChunkSize := bytesPerSecond * firstChunkDurationMS / 1000
+	firstChunkSize -= firstChunkSize % frameSize
+	if firstChunkSize <= 0 {
+		firstChunkSize = minInt(len(audio.PCM), regularChunkSize)
 	}
 
-	chunks := make([]audioChunk, 0, len(audio.PCM)/chunkSize+1)
-	for start := 0; start < len(audio.PCM); start += chunkSize {
-		end := start + chunkSize
+	chunks := make([]audioChunk, 0, len(audio.PCM)/regularChunkSize+1)
+	for start := 0; start < len(audio.PCM); {
+		currentChunkSize := regularChunkSize
+		if start == 0 {
+			currentChunkSize = firstChunkSize
+		}
+		end := start + currentChunkSize
 		if end > len(audio.PCM) {
 			end = len(audio.PCM)
 		}
@@ -208,8 +234,16 @@ func splitAudioChunks(audio *common.AudioData, chunkDurationMS int) ([]audioChun
 				Channel: audio.Channel,
 			},
 		})
+		start = end
 	}
 	return chunks, nil
+}
+
+func minInt(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func shiftUtterances(utterances []response.Utterance, offsetMS int) []response.Utterance {

@@ -940,6 +940,7 @@ abstract final class VideoHttp {
         '/transcribe',
         queryParameters: const {
           'progressive': '1',
+          'first_chunk_ms': '120000',
           'chunk_ms': '300000',
         },
         data: FormData.fromMap({
