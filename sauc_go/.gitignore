@@ -1,0 +1,4 @@
+__MACOSX/
+tmp_cache_test/
+sauc_go/run.log
+sauc_go/config.toml
