@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:PiliPlus/common/constants.dart';
@@ -908,15 +910,6 @@ abstract final class VideoHttp {
     return sb.toString();
   }
 
-  static String _srtToVtt(String srt) {
-    final normalized = srt.replaceAll('\r\n', '\n').trim();
-    final converted = normalized.replaceAllMapped(
-      RegExp(r'(\d{2}:\d{2}:\d{2}),(\d{3})'),
-      (match) => '${match[1]}.${match[2]}',
-    );
-    return 'WEBVTT\n\n$converted';
-  }
-
   static Future<String?> vttSubtitles(String subtitleUrl) async {
     final res = await Request().get("https:$subtitleUrl");
     if (res.data?['body'] case List list) {
@@ -925,64 +918,323 @@ abstract final class VideoHttp {
     return null;
   }
 
-  static Future<String> saucSubtitles(String audioUrl) async {
+  static Future<String> saucSubtitles(String audioUrl) {
+    return saucSubtitlesProgressive(audioUrl);
+  }
+
+  static Future<String> saucSubtitlesProgressive(
+    String audioUrl, {
+    CancelToken? cancelToken,
+    FutureOr<void> Function(String vtt, int completedChunks, int totalChunks)?
+    onProgress,
+  }) async {
     final audioUri = Uri.parse(audioUrl.http2https);
     final filename = audioUri.pathSegments.lastWhere(
       (segment) => segment.isNotEmpty,
       orElse: () => 'audio.m4a',
     );
-
-    final downloadRes = await Request.dio.get<List<int>>(
-      audioUri.toString(),
-      options: Options(
-        responseType: ResponseType.bytes,
-        headers: {
-          ...Constants.baseHeaders,
-          'user-agent': UaType.pc.ua,
-          'referer': HttpString.baseUrl,
-        },
-        extra: {'account': const NoAccount()},
-        sendTimeout: const Duration(minutes: 10),
-        receiveTimeout: const Duration(hours: 1),
-      ),
-    );
-    final rawAudio = downloadRes.data;
-    if (downloadRes.statusCode != 200 || rawAudio == null) {
-      throw Exception('下载音频失败');
-    }
-
-    final audioBytes = Uint8List.fromList(
-      Request.responseBytesDecoder(rawAudio, downloadRes.headers.map),
-    );
+    final audioBytes = await _downloadSubtitleAudioBytes(audioUri);
 
     try {
-      final res = await _saucDio.post<Map<String, dynamic>>(
+      final res = await _saucDio.post<ResponseBody>(
         '/transcribe',
+        queryParameters: const {
+          'progressive': '1',
+          'chunk_ms': '300000',
+        },
         data: FormData.fromMap({
           'file': MultipartFile.fromBytes(audioBytes, filename: filename),
         }),
+        options: Options(responseType: ResponseType.stream),
+        cancelToken: cancelToken,
       );
-      final data = res.data;
-      if (data == null) {
+      final body = res.data;
+      if (body == null) {
         throw Exception('转写服务返回为空');
       }
-      if (data['error'] case final String error when error.isNotEmpty) {
-        throw Exception(error);
+
+      final utterances = <Map<String, dynamic>>[];
+      String? latestVtt;
+      int totalChunks = 0;
+      int completedChunks = 0;
+
+      await for (final line
+          in body.stream
+              .cast<List<int>>()
+              .transform(utf8.decoder)
+              .transform(const LineSplitter())) {
+        final text = line.trim();
+        if (text.isEmpty) {
+          continue;
+        }
+        final decoded = jsonDecode(text);
+        if (decoded is! Map) {
+          continue;
+        }
+        final data = Map<String, dynamic>.from(decoded);
+        switch (data['type']) {
+          case 'ready':
+            if (data['total_chunks'] case final num total) {
+              totalChunks = total.toInt();
+            }
+            break;
+          case 'chunk':
+            if (data['total_chunks'] case final num total) {
+              totalChunks = total.toInt();
+            }
+            if (data['chunk_index'] case final num chunkIndex) {
+              completedChunks = chunkIndex.toInt();
+            }
+            if (data['utterances'] case List list when list.isNotEmpty) {
+              utterances.addAll(
+                list.whereType<Map>().map(Map<String, dynamic>.from),
+              );
+              latestVtt = await compute<List, String>(
+                processList,
+                List<dynamic>.from(utterances),
+              );
+              if (latestVtt.trim().isNotEmpty && onProgress != null) {
+                await onProgress(latestVtt, completedChunks, totalChunks);
+              }
+            }
+            break;
+          case 'done':
+            break;
+          case 'error':
+            final error = (data['error'] ?? '转写服务失败').toString();
+            throw Exception(error);
+        }
       }
-      if (data['utterances'] case List list when list.isNotEmpty) {
-        return compute<List, String>(processList, list);
-      }
-      if (data['srt'] case final String srt when srt.trim().isNotEmpty) {
-        return _srtToVtt(srt);
+
+      if (latestVtt != null && latestVtt.trim().isNotEmpty) {
+        return latestVtt;
       }
       throw Exception('转写结果缺少可用字幕');
     } on DioException catch (e) {
+      if (CancelToken.isCancel(e)) {
+        rethrow;
+      }
       final data = e.response?.data;
       final message = data is Map
           ? (data['error'] ?? data['message'] ?? e.message)
           : e.message;
       throw Exception((message ?? '请求 sauc_go 失败').toString());
     }
+  }
+
+  static Future<Uint8List> _downloadSubtitleAudioBytes(Uri audioUri) async {
+    final attempts = <({String name, Map<String, String> headers})>[
+      (
+        name: 'player-headers',
+        headers: _subtitleAudioHeaders(),
+      ),
+    ];
+
+    final videoCookie = _accountCookieHeader(Accounts.get(AccountType.video));
+    if (videoCookie != null) {
+      attempts.add((
+        name: 'video-account-cookie',
+        headers: _subtitleAudioHeaders(cookie: videoCookie),
+      ));
+    }
+
+    final mainCookie = _accountCookieHeader(Accounts.main);
+    if (mainCookie != null && mainCookie != videoCookie) {
+      attempts.add((
+        name: 'main-account-cookie',
+        headers: _subtitleAudioHeaders(cookie: mainCookie),
+      ));
+    }
+
+    final failures = <String>[];
+    for (final attempt in attempts) {
+      final result = await _downloadSubtitleAudioBytesOnce(
+        audioUri,
+        headers: attempt.headers,
+      );
+      final mediaKind = _detectAudioContainer(result.bytes);
+      if (_isUsableSubtitleAudioPayload(result.bytes, result.contentType)) {
+        return result.bytes;
+      }
+      failures.add(
+        '${attempt.name}: '
+        'status=${result.statusCode}, '
+        'type=${result.contentType ?? "-"}, '
+        'bytes=${result.bytes.length}, '
+        'magic=${mediaKind ?? "-"}, '
+        'preview=${_payloadPreview(result.bytes)}',
+      );
+    }
+
+    throw Exception('下载音频失败: ${failures.join(' | ')}');
+  }
+
+  static Map<String, String> _subtitleAudioHeaders({String? cookie}) => {
+    'accept-encoding': 'identity',
+    'user-agent': UaType.pc.ua,
+    'referer': HttpString.baseUrl,
+    if (cookie != null && cookie.isNotEmpty) HttpHeaders.cookieHeader: cookie,
+  };
+
+  static String? _accountCookieHeader(Account account) {
+    final cookies = account.cookieJar.toList();
+    if (cookies.isEmpty) {
+      return null;
+    }
+    return cookies.map((cookie) => '${cookie.name}=${cookie.value}').join('; ');
+  }
+
+  static Future<
+    ({
+      Uint8List bytes,
+      String? contentType,
+      int statusCode,
+    })
+  >
+  _downloadSubtitleAudioBytesOnce(
+    Uri audioUri, {
+    required Map<String, String> headers,
+  }) async {
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 15)
+      ..idleTimeout = const Duration(seconds: 15)
+      ..autoUncompress = false;
+    if (Pref.enableSystemProxy) {
+      final proxyPort = int.tryParse(Pref.systemProxyPort);
+      if (proxyPort != null && Pref.systemProxyHost.isNotEmpty) {
+        client.findProxy = (_) => 'PROXY ${Pref.systemProxyHost}:$proxyPort';
+      }
+    }
+    if (Pref.badCertificateCallback) {
+      client.badCertificateCallback = (cert, host, port) => true;
+    }
+
+    try {
+      final request = await client.getUrl(audioUri)
+        ..followRedirects = true
+        ..maxRedirects = 5;
+      for (final entry in headers.entries) {
+        request.headers.set(entry.key, entry.value);
+      }
+      request.headers.set(HttpHeaders.rangeHeader, 'bytes=0-');
+      final response = await request.close();
+      final builder = BytesBuilder(copy: false);
+      await for (final chunk in response) {
+        builder.add(chunk);
+      }
+      return (
+        bytes: builder.takeBytes(),
+        contentType: response.headers.value(HttpHeaders.contentTypeHeader),
+        statusCode: response.statusCode,
+      );
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  static bool _isUsableSubtitleAudioPayload(
+    Uint8List bytes,
+    String? contentType,
+  ) {
+    if (bytes.isEmpty) {
+      return false;
+    }
+
+    final normalizedContentType = contentType?.toLowerCase();
+    if (normalizedContentType != null) {
+      if (normalizedContentType.startsWith('audio/') ||
+          normalizedContentType.startsWith('video/')) {
+        return true;
+      }
+      if (normalizedContentType.startsWith('application/octet-stream') &&
+          !_looksLikeTextPayload(bytes)) {
+        return true;
+      }
+    }
+
+    if (_detectAudioContainer(bytes) != null) {
+      return true;
+    }
+
+    if (bytes.length < 1024) {
+      return false;
+    }
+
+    return !_looksLikeTextPayload(bytes);
+  }
+
+  static String? _detectAudioContainer(Uint8List bytes) {
+    if (bytes.length >= 12 &&
+        bytes[0] == 0x52 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x46 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x41 &&
+        bytes[10] == 0x56 &&
+        bytes[11] == 0x45) {
+      return 'wav';
+    }
+    if (bytes.length >= 8 &&
+        bytes[4] == 0x66 &&
+        bytes[5] == 0x74 &&
+        bytes[6] == 0x79 &&
+        bytes[7] == 0x70) {
+      return 'mp4';
+    }
+    if (bytes.length >= 4 &&
+        bytes[0] == 0x66 &&
+        bytes[1] == 0x4C &&
+        bytes[2] == 0x61 &&
+        bytes[3] == 0x43) {
+      return 'flac';
+    }
+    if (bytes.length >= 4 &&
+        bytes[0] == 0x1A &&
+        bytes[1] == 0x45 &&
+        bytes[2] == 0xDF &&
+        bytes[3] == 0xA3) {
+      return 'webm';
+    }
+    if (bytes.length >= 3 &&
+        bytes[0] == 0x49 &&
+        bytes[1] == 0x44 &&
+        bytes[2] == 0x33) {
+      return 'mp3';
+    }
+    if (bytes.length >= 2 && bytes[0] == 0xFF && (bytes[1] & 0xE0) == 0xE0) {
+      return 'aac-or-mp3';
+    }
+    return null;
+  }
+
+  static bool _looksLikeTextPayload(Uint8List bytes) {
+    final preview = _payloadPreview(bytes);
+    if (preview.isEmpty) {
+      return false;
+    }
+    final lower = preview.toLowerCase();
+    return lower.startsWith('<!doctype') ||
+        lower.startsWith('<html') ||
+        lower.startsWith('{') ||
+        lower.startsWith('[') ||
+        lower.contains('"code"') ||
+        lower.contains('"message"') ||
+        lower.contains('<body') ||
+        lower.contains('access denied') ||
+        lower.contains('forbidden');
+  }
+
+  static String _payloadPreview(Uint8List bytes) {
+    if (bytes.isEmpty) {
+      return '-';
+    }
+    final end = bytes.length < 120 ? bytes.length : 120;
+    final preview = utf8.decode(
+      bytes.sublist(0, end),
+      allowMalformed: true,
+    );
+    return preview.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   static bool _canAddRank(Map i) {

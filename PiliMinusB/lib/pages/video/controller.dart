@@ -64,6 +64,7 @@ import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:PiliPlus/utils/utils.dart';
 import 'package:PiliPlus/utils/video_utils.dart';
+import 'package:dio/dio.dart';
 import 'package:extended_nested_scroll_view/extended_nested_scroll_view.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
@@ -999,12 +1000,44 @@ class VideoDetailController extends GetxController
   late final RxInt vttSubtitlesIndex = (-1).obs;
   late final RxBool showVP = true.obs;
   late final RxList<ViewPointSegment> viewPointList = <ViewPointSegment>[].obs;
+  CancelToken? _localSubtitleCancelToken;
+  int _localSubtitleRequestId = 0;
+  int? _pendingLocalSubtitleIndex;
 
   String _subtitleErrorMessage(Object error) =>
       error.toString().replaceFirst('Exception: ', '');
 
+  void _cancelPendingLocalSubtitle({bool clearPartial = true}) {
+    final pendingIndex = _pendingLocalSubtitleIndex;
+    if (clearPartial && pendingIndex != null) {
+      vttSubtitles.remove(pendingIndex);
+    }
+    _pendingLocalSubtitleIndex = null;
+    _localSubtitleRequestId++;
+    _localSubtitleCancelToken?.cancel('subtitle cancelled');
+    _localSubtitleCancelToken = null;
+  }
+
+  Future<void> _applySubtitleTrack(
+    int index,
+    ({bool isData, String id}) subtitle,
+  ) async {
+    final sub = subtitles[index - 1];
+    await plPlayerController.videoPlayerController?.setSubtitleTrack(
+      SubtitleTrack(
+        subtitle.id,
+        sub.lanDoc,
+        sub.lan,
+        uri: !subtitle.isData,
+        data: subtitle.isData,
+      ),
+    );
+    vttSubtitlesIndex.value = index;
+  }
+
   // 设定字幕轨道
   Future<void> setSubtitle(int index) async {
+    _cancelPendingLocalSubtitle();
     if (index <= 0) {
       await plPlayerController.videoPlayerController?.setSubtitleTrack(
         SubtitleTrack.no(),
@@ -1013,39 +1046,81 @@ class VideoDetailController extends GetxController
       return;
     }
 
-    Future<void> setSub(({bool isData, String id}) subtitle) async {
-      final sub = subtitles[index - 1];
-      await plPlayerController.videoPlayerController?.setSubtitleTrack(
-        SubtitleTrack(
-          subtitle.id,
-          sub.lanDoc,
-          sub.lan,
-          uri: !subtitle.isData,
-          data: subtitle.isData,
-        ),
-      );
-      vttSubtitlesIndex.value = index;
-    }
-
     ({bool isData, String id})? subtitle = vttSubtitles[index - 1];
     if (subtitle != null) {
-      await setSub(subtitle);
+      await _applySubtitleTrack(index, subtitle);
     } else {
       final sub = subtitles[index - 1];
       final shouldShowLoading = sub.isLocal;
+      var loadingVisible = false;
+      void dismissLoading() {
+        if (loadingVisible) {
+          SmartDialog.dismiss(status: SmartStatus.loading);
+          loadingVisible = false;
+        }
+      }
+
       if (shouldShowLoading) {
         SmartDialog.showLoading(msg: '正在转写字幕');
+        loadingVisible = true;
       }
       try {
-        final result = sub.isLocal
-            ? await VideoHttp.saucSubtitles(sub.transcriptionAudioUrl!)
-            : await VideoHttp.vttSubtitles(sub.subtitleUrl!);
+        String? result;
+        if (sub.isLocal) {
+          await plPlayerController.videoPlayerController?.setSubtitleTrack(
+            SubtitleTrack.no(),
+          );
+          vttSubtitlesIndex.value = index;
+
+          final requestId = _localSubtitleRequestId;
+          final cancelToken = CancelToken();
+          _localSubtitleCancelToken = cancelToken;
+          _pendingLocalSubtitleIndex = index - 1;
+          result = await VideoHttp.saucSubtitlesProgressive(
+            sub.transcriptionAudioUrl!,
+            cancelToken: cancelToken,
+            onProgress: (vtt, completedChunks, totalChunks) async {
+              if (requestId != _localSubtitleRequestId || isClosed) {
+                return;
+              }
+              final subtitle = (isData: true, id: vtt);
+              vttSubtitles[index - 1] = subtitle;
+              await _applySubtitleTrack(index, subtitle);
+              dismissLoading();
+              if (kDebugMode) {
+                debugPrint(
+                  'local subtitle progress: $completedChunks/$totalChunks',
+                );
+              }
+            },
+          );
+          if (requestId != _localSubtitleRequestId) {
+            return;
+          }
+          _localSubtitleCancelToken = null;
+          _pendingLocalSubtitleIndex = null;
+        } else {
+          result = await VideoHttp.vttSubtitles(sub.subtitleUrl!);
+        }
         if (!isClosed && result != null) {
           final subtitle = (isData: true, id: result);
           vttSubtitles[index - 1] = subtitle;
-          await setSub(subtitle);
+          await _applySubtitleTrack(index, subtitle);
         } else if (!isClosed) {
           SmartDialog.showToast('字幕加载失败');
+        }
+      } on DioException catch (e, s) {
+        if (CancelToken.isCancel(e)) {
+          if (kDebugMode) {
+            debugPrint('setSubtitle cancelled: $e\n$s');
+          }
+          return;
+        }
+        if (kDebugMode) {
+          debugPrint('setSubtitle error: $e\n$s');
+        }
+        if (!isClosed) {
+          SmartDialog.showToast('字幕加载失败: ${_subtitleErrorMessage(e)}');
         }
       } catch (e, s) {
         if (kDebugMode) {
@@ -1055,9 +1130,7 @@ class VideoDetailController extends GetxController
           SmartDialog.showToast('字幕加载失败: ${_subtitleErrorMessage(e)}');
         }
       } finally {
-        if (shouldShowLoading) {
-          SmartDialog.dismiss(status: SmartStatus.loading);
-        }
+        dismissLoading();
       }
     }
   }
@@ -1218,6 +1291,7 @@ class VideoDetailController extends GetxController
 
   @override
   void onClose() {
+    _cancelPendingLocalSubtitle();
     cid.close();
     if (isFileSource) {
       cacheLocalProgress();
@@ -1235,6 +1309,7 @@ class VideoDetailController extends GetxController
   }
 
   void onReset({bool isStein = false}) {
+    _cancelPendingLocalSubtitle();
     if (isFileSource) {
       cacheLocalProgress();
     }

@@ -5,13 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
-
-	"byted.org/data-speech/asr-tob-demo/sauc/client"
 )
 
 type HTTPServer struct {
@@ -82,13 +81,56 @@ func (s *HTTPServer) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer cleanup()
+	if stat, statErr := os.Stat(filePath); statErr == nil {
+		log.Printf(
+			"received transcribe upload: filename=%s temp=%s size=%d progressive=%t chunk_ms=%d",
+			fileName,
+			filePath,
+			stat.Size(),
+			isProgressiveTranscribe(r),
+			parseChunkDurationMS(r),
+		)
+	}
 
 	startedAt := time.Now()
 	ctx, cancel := context.WithTimeout(r.Context(), s.timeout)
 	defer cancel()
+	chunkDurationMS := parseChunkDurationMS(r)
 
-	asrClient := client.NewAsrWsClient(s.wsURL, s.segmentDuration).WithNonstream(s.nonstream)
-	result, err := asrClient.TranscribeFile(ctx, filePath)
+	if isProgressiveTranscribe(r) {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "streaming is not supported by current server"})
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-ndjson; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("X-Accel-Buffering", "no")
+
+		result, err := s.transcribeByChunks(ctx, filePath, chunkDurationMS, func(event transcribeProgressEvent) error {
+			event.Filename = fileName
+			return writeNDJSON(w, flusher, event)
+		})
+		if err != nil {
+			_ = writeNDJSON(w, flusher, transcribeProgressEvent{
+				Type:      "error",
+				Filename:  fileName,
+				Error:     err.Error(),
+				ElapsedMS: time.Since(startedAt).Milliseconds(),
+			})
+			return
+		}
+		_ = writeNDJSON(w, flusher, transcribeProgressEvent{
+			Type:      "done",
+			Filename:  fileName,
+			Responses: len(result.Responses),
+			ElapsedMS: time.Since(startedAt).Milliseconds(),
+			Text:      result.Text,
+		})
+		return
+	}
+
+	result, err := s.transcribeByChunks(ctx, filePath, chunkDurationMS, nil)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: err.Error()})
 		return

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -95,6 +97,13 @@ func (c *AsrWsClient) sendFullClientRequest(audio *common.AudioData) error {
 
 func (c *AsrWsClient) sendMessages(segmentSize int, pcm []byte, stopChan <-chan struct{}) error {
 	audioSegments := splitAudio(pcm, segmentSize)
+	log.Printf(
+		"send audio stream: bytes=%d segment_size=%d segments=%d nonstream=%v",
+		len(pcm),
+		segmentSize,
+		len(audioSegments),
+		c.nonstream,
+	)
 	var ticker *time.Ticker
 	if !c.nonstream {
 		ticker = time.NewTicker(time.Duration(c.segmentDuration) * time.Millisecond)
@@ -181,19 +190,28 @@ func (c *AsrWsClient) Execute(ctx context.Context, filePath string, resChan chan
 		close(resChan)
 		return errors.New("file path is empty")
 	}
-	c.seq = 1
-	if c.url == "" {
-		close(resChan)
-		return errors.New("url is empty")
-	}
 	audio, err := c.readAudioData(filePath)
 	if err != nil {
 		close(resChan)
 		return fmt.Errorf("read audio data err: %w", err)
 	}
+	return c.ExecuteAudio(ctx, audio, resChan)
+}
+
+func (c *AsrWsClient) ExecuteAudio(ctx context.Context, audio *common.AudioData, resChan chan<- *response.AsrResponse) error {
+	c.seq = 1
+	if c.url == "" {
+		close(resChan)
+		return errors.New("url is empty")
+	}
+	if audio == nil {
+		close(resChan)
+		return errors.New("audio is empty")
+	}
 	segmentSize := c.getSegmentSize(audio)
 
-	if err = c.createConnection(ctx); err != nil {
+	err := c.createConnection(ctx)
+	if err != nil {
 		close(resChan)
 		return fmt.Errorf("create connection err: %w", err)
 	}
@@ -213,27 +231,24 @@ func (c *AsrWsClient) Excute(ctx context.Context, filePath string, resChan chan<
 	return c.Execute(ctx, filePath, resChan)
 }
 
-func (c *AsrWsClient) TranscribeFile(ctx context.Context, filePath string) (*Transcript, error) {
+func (c *AsrWsClient) transcribeAudio(ctx context.Context, audio *common.AudioData) (*Transcript, error) {
 	resChan := make(chan *response.AsrResponse)
 	errChan := make(chan error, 1)
 	go func() {
-		errChan <- c.Execute(ctx, filePath, resChan)
+		errChan <- c.ExecuteAudio(ctx, audio, resChan)
 	}()
 
-	result := &Transcript{}
-	var latestPayload *response.AsrResponsePayload
+	var responses []*response.AsrResponse
 	for res := range resChan {
-		result.Responses = append(result.Responses, res)
-		if res.PayloadMsg != nil {
-			latestPayload = res.PayloadMsg
-		}
+		responses = append(responses, res)
 	}
 
 	if err := <-errChan; err != nil {
 		return nil, err
 	}
 
-	for _, item := range result.Responses {
+	result := &Transcript{Responses: responses}
+	for _, item := range responses {
 		if item.Code != 0 {
 			errMsg := "asr service returned non-zero code"
 			if item.PayloadMsg != nil && item.PayloadMsg.Error != "" {
@@ -243,14 +258,129 @@ func (c *AsrWsClient) TranscribeFile(ctx context.Context, filePath string) (*Tra
 		}
 	}
 
+	var latestPayload *response.AsrResponsePayload
+	mergedUtterances := make([]response.Utterance, 0)
+	for _, item := range responses {
+		if item.PayloadMsg == nil {
+			continue
+		}
+		latestPayload = item.PayloadMsg
+		mergedUtterances = mergeUtterances(
+			mergedUtterances,
+			item.PayloadMsg.Result.Utterances,
+		)
+	}
+
 	if latestPayload != nil {
-		result.Text = latestPayload.Result.Text
-		result.Utterances = latestPayload.Result.Utterances
 		result.AudioInfo = latestPayload.AudioInfo
-		result.SRT = response.BuildSRT(latestPayload.Result.Utterances)
+	}
+	if len(mergedUtterances) > 0 {
+		result.Utterances = mergedUtterances
+		result.Text = buildTranscriptText(mergedUtterances)
+		result.SRT = response.BuildSRT(mergedUtterances)
+	} else if latestPayload != nil {
+		result.Text = strings.TrimSpace(latestPayload.Result.Text)
+		durationMS := latestPayload.AudioInfo.Duration
+		if durationMS <= 0 {
+			durationMS = estimateAudioDurationMS(audio)
+		}
+		if result.Text != "" && durationMS > 0 {
+			log.Printf(
+				"fallback utterance synthesis: duration_ms=%d text_len=%d",
+				durationMS,
+				len(result.Text),
+			)
+			result.Utterances = []response.Utterance{
+				{
+					Definite:  true,
+					StartTime: 0,
+					EndTime:   durationMS,
+					Text:      result.Text,
+				},
+			}
+			result.SRT = response.BuildSRT(result.Utterances)
+		}
 	}
 
 	return result, nil
+}
+
+func (c *AsrWsClient) TranscribeAudio(ctx context.Context, audio *common.AudioData) (*Transcript, error) {
+	if audio == nil {
+		return nil, errors.New("audio is empty")
+	}
+	return c.transcribeAudio(ctx, audio)
+}
+
+func (c *AsrWsClient) TranscribeFile(ctx context.Context, filePath string) (*Transcript, error) {
+	if filePath == "" {
+		return nil, errors.New("file path is empty")
+	}
+	audio, err := c.readAudioData(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("read audio data err: %w", err)
+	}
+	return c.transcribeAudio(ctx, audio)
+}
+
+func mergeUtterances(existing []response.Utterance, incoming []response.Utterance) []response.Utterance {
+	if len(incoming) == 0 {
+		return existing
+	}
+
+	indexMap := make(map[int]int, len(existing))
+	for index, utterance := range existing {
+		indexMap[utterance.StartTime] = index
+	}
+
+	for _, utterance := range incoming {
+		if strings.TrimSpace(utterance.Text) == "" || utterance.EndTime <= utterance.StartTime {
+			continue
+		}
+		if index, ok := indexMap[utterance.StartTime]; ok {
+			existing[index] = utterance
+			continue
+		}
+		indexMap[utterance.StartTime] = len(existing)
+		existing = append(existing, utterance)
+	}
+
+	sort.Slice(existing, func(i int, j int) bool {
+		if existing[i].StartTime == existing[j].StartTime {
+			return existing[i].EndTime < existing[j].EndTime
+		}
+		return existing[i].StartTime < existing[j].StartTime
+	})
+	return existing
+}
+
+func buildTranscriptText(utterances []response.Utterance) string {
+	if len(utterances) == 0 {
+		return ""
+	}
+
+	lines := make([]string, 0, len(utterances))
+	for _, utterance := range utterances {
+		text := strings.TrimSpace(utterance.Text)
+		if text != "" {
+			lines = append(lines, text)
+		}
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n"))
+}
+
+func estimateAudioDurationMS(audio *common.AudioData) int {
+	if audio == nil || audio.Rate <= 0 || audio.Channel <= 0 || audio.Bits <= 0 {
+		return 0
+	}
+	bytesPerSecond := audio.Rate * audio.Channel * (audio.Bits / 8)
+	if bytesPerSecond <= 0 {
+		return 0
+	}
+	if len(audio.PCM) > 0 {
+		return len(audio.PCM) * 1000 / bytesPerSecond
+	}
+	return len(audio.Content) * 1000 / bytesPerSecond
 }
 
 func splitAudio(data []byte, segmentSize int) [][]byte {
