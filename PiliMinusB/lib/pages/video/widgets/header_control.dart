@@ -1184,57 +1184,83 @@ class HeaderControlState extends State<HeaderControl>
         title: const Text('保存字幕'),
         content: SingleChildScrollView(
           child: Column(
-            children: videoDetailCtr.subtitles
-                .map(
-                  (item) => ListTile(
-                    dense: true,
-                    onTap: () async {
-                      Get.back();
-                      final url = item.subtitleUrl;
-                      if (url == null || url.isEmpty) return;
-                      try {
-                        final res = await Request.dio.get<Uint8List>(
-                          url.http2https,
-                          options: Options(
-                            responseType: ResponseType.bytes,
-                            headers: Constants.baseHeaders,
-                            extra: {'account': const NoAccount()},
+            children: videoDetailCtr.subtitles.asMap().entries.map(
+              (entry) {
+                final item = entry.value;
+                return ListTile(
+                  dense: true,
+                  onTap: () async {
+                    Get.back();
+                    final index = entry.key;
+                    if (item.isLocal) {
+                      final subtitle = videoDetailCtr.vttSubtitles[index];
+                      if (subtitle?.isData != true) {
+                        SmartDialog.showToast('请先完成本地转写后再导出');
+                        return;
+                      }
+                      String name =
+                          '${introController.videoDetail.value.title}-${videoDetailCtr.bvid}-${videoDetailCtr.cid.value}-${item.lanDoc}.vtt';
+                      if (Platform.isWindows) {
+                        name = name.replaceAll(
+                          RegExp(r'[<>:/\\|?*"]'),
+                          '',
+                        );
+                      }
+                      Utils.saveBytes2File(
+                        name: name,
+                        bytes: Uint8List.fromList(utf8.encode(subtitle!.id)),
+                        allowedExtensions: const ['vtt'],
+                      );
+                      return;
+                    }
+                    final url = item.subtitleUrl;
+                    if (url == null || url.isEmpty) {
+                      SmartDialog.showToast('当前字幕不支持导出');
+                      return;
+                    }
+                    try {
+                      final res = await Request.dio.get<Uint8List>(
+                        url.http2https,
+                        options: Options(
+                          responseType: ResponseType.bytes,
+                          headers: Constants.baseHeaders,
+                          extra: {'account': const NoAccount()},
+                        ),
+                      );
+                      if (res.statusCode == 200) {
+                        final bytes = Uint8List.fromList(
+                          Request.responseBytesDecoder(
+                            res.data!,
+                            res.headers.map,
                           ),
                         );
-                        if (res.statusCode == 200) {
-                          final bytes = Uint8List.fromList(
-                            Request.responseBytesDecoder(
-                              res.data!,
-                              res.headers.map,
-                            ),
-                          );
-                          String name =
-                              '${introController.videoDetail.value.title}-${videoDetailCtr.bvid}-${videoDetailCtr.cid.value}-${item.lanDoc}.json';
-                          if (Platform.isWindows) {
-                            // Reserved characters may not be used in file names. See: https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file#naming-conventions
-                            name = name.replaceAll(
-                              RegExp(r'[<>:/\\|?*"]'),
-                              '',
-                            );
-                          }
-                          Utils.saveBytes2File(
-                            name: name,
-                            bytes: bytes,
-                            allowedExtensions: const ['json'],
+                        String name =
+                            '${introController.videoDetail.value.title}-${videoDetailCtr.bvid}-${videoDetailCtr.cid.value}-${item.lanDoc}.json';
+                        if (Platform.isWindows) {
+                          // Reserved characters may not be used in file names. See: https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file#naming-conventions
+                          name = name.replaceAll(
+                            RegExp(r'[<>:/\\|?*"]'),
+                            '',
                           );
                         }
-                      } catch (e, s) {
-                        Utils.reportError(e, s);
-                        SmartDialog.showToast(e.toString());
+                        Utils.saveBytes2File(
+                          name: name,
+                          bytes: bytes,
+                          allowedExtensions: const ['json'],
+                        );
                       }
-                    },
-                    title: Text(
-                      item.lanDoc!,
-                      style: const TextStyle(fontSize: 14),
-                    ),
+                    } catch (e, s) {
+                      Utils.reportError(e, s);
+                      SmartDialog.showToast(e.toString());
+                    }
+                  },
+                  title: Text(
+                    item.lanDoc!,
+                    style: const TextStyle(fontSize: 14),
                   ),
-                )
-                .toList(),
+                );
+              },
+            ).toList(),
           ),
         ),
       ),

@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:PiliPlus/common/constants.dart';
 import 'package:PiliPlus/http/api.dart';
+import 'package:PiliPlus/http/constants.dart';
 import 'package:PiliPlus/http/init.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/http/login.dart';
@@ -27,6 +29,7 @@ import 'package:PiliPlus/models_new/video/video_note_list/data.dart';
 import 'package:PiliPlus/models_new/video/video_play_info/data.dart';
 import 'package:PiliPlus/models_new/video/video_relation/data.dart';
 import 'package:PiliPlus/utils/accounts.dart';
+import 'package:PiliPlus/utils/accounts/account.dart';
 import 'package:PiliPlus/utils/app_sign.dart';
 import 'package:PiliPlus/utils/extension/string_ext.dart';
 import 'package:PiliPlus/utils/global_data.dart';
@@ -41,6 +44,18 @@ import 'package:flutter/foundation.dart' show compute;
 abstract final class VideoHttp {
   static RegExp zoneRegExp = RegExp(Pref.banWordForZone, caseSensitive: false);
   static bool enableFilter = zoneRegExp.pattern.isNotEmpty;
+  static final Dio _saucDio =
+      Dio(
+          BaseOptions(
+            baseUrl: HttpString.saucBaseUrl,
+            connectTimeout: const Duration(seconds: 15),
+            sendTimeout: const Duration(minutes: 10),
+            receiveTimeout: const Duration(hours: 2),
+          ),
+        )
+        ..options.validateStatus = (int? status) {
+          return status != null && status >= 200 && status < 300;
+        };
 
   // 首页推荐视频
   static Future<LoadingState<List<RecVideoItemModel>>> rcmdVideoList({
@@ -855,16 +870,51 @@ abstract final class VideoHttp {
         : "${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:$sms";
   }
 
+  static num? _subtitleField(Map<String, dynamic> item, String key) {
+    final value = item[key];
+    if (value is num) {
+      return value;
+    }
+    if (value is String) {
+      return num.tryParse(value);
+    }
+    return null;
+  }
+
   static String processList(List list) {
-    final sb = StringBuffer('WEBVTT\n\n')
-      ..writeAll(
-        list.map(
-          (item) =>
-              '${item?['sid'] ?? 0}\n${_subtitleTimecode(item['from'])} --> ${_subtitleTimecode(item['to'])}\n${item['content'].trim()}',
-        ),
-        '\n\n',
+    final subtitles = <String>[];
+    for (int i = 0; i < list.length; i++) {
+      final rawItem = list[i];
+      if (rawItem is! Map) {
+        continue;
+      }
+      final item = Map<String, dynamic>.from(rawItem);
+      final startSeconds = _subtitleField(item, 'from');
+      final endSeconds = _subtitleField(item, 'to');
+      final startMillis = _subtitleField(item, 'start_time');
+      final endMillis = _subtitleField(item, 'end_time');
+      final start =
+          startSeconds ?? (startMillis == null ? null : startMillis / 1000);
+      final end = endSeconds ?? (endMillis == null ? null : endMillis / 1000);
+      final content = (item['content'] ?? item['text'] ?? '').toString().trim();
+      if (start == null || end == null || content.isEmpty) {
+        continue;
+      }
+      subtitles.add(
+        '${item['sid'] ?? i + 1}\n${_subtitleTimecode(start)} --> ${_subtitleTimecode(end)}\n$content',
       );
+    }
+    final sb = StringBuffer('WEBVTT\n\n')..writeAll(subtitles, '\n\n');
     return sb.toString();
+  }
+
+  static String _srtToVtt(String srt) {
+    final normalized = srt.replaceAll('\r\n', '\n').trim();
+    final converted = normalized.replaceAllMapped(
+      RegExp(r'(\d{2}:\d{2}:\d{2}),(\d{3})'),
+      (match) => '${match[1]}.${match[2]}',
+    );
+    return 'WEBVTT\n\n$converted';
   }
 
   static Future<String?> vttSubtitles(String subtitleUrl) async {
@@ -873,6 +923,66 @@ abstract final class VideoHttp {
       return compute<List, String>(processList, list);
     }
     return null;
+  }
+
+  static Future<String> saucSubtitles(String audioUrl) async {
+    final audioUri = Uri.parse(audioUrl.http2https);
+    final filename = audioUri.pathSegments.lastWhere(
+      (segment) => segment.isNotEmpty,
+      orElse: () => 'audio.m4a',
+    );
+
+    final downloadRes = await Request.dio.get<List<int>>(
+      audioUri.toString(),
+      options: Options(
+        responseType: ResponseType.bytes,
+        headers: {
+          ...Constants.baseHeaders,
+          'user-agent': UaType.pc.ua,
+          'referer': HttpString.baseUrl,
+        },
+        extra: {'account': const NoAccount()},
+        sendTimeout: const Duration(minutes: 10),
+        receiveTimeout: const Duration(hours: 1),
+      ),
+    );
+    final rawAudio = downloadRes.data;
+    if (downloadRes.statusCode != 200 || rawAudio == null) {
+      throw Exception('下载音频失败');
+    }
+
+    final audioBytes = Uint8List.fromList(
+      Request.responseBytesDecoder(rawAudio, downloadRes.headers.map),
+    );
+
+    try {
+      final res = await _saucDio.post<Map<String, dynamic>>(
+        '/transcribe',
+        data: FormData.fromMap({
+          'file': MultipartFile.fromBytes(audioBytes, filename: filename),
+        }),
+      );
+      final data = res.data;
+      if (data == null) {
+        throw Exception('转写服务返回为空');
+      }
+      if (data['error'] case final String error when error.isNotEmpty) {
+        throw Exception(error);
+      }
+      if (data['utterances'] case List list when list.isNotEmpty) {
+        return compute<List, String>(processList, list);
+      }
+      if (data['srt'] case final String srt when srt.trim().isNotEmpty) {
+        return _srtToVtt(srt);
+      }
+      throw Exception('转写结果缺少可用字幕');
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      final message = data is Map
+          ? (data['error'] ?? data['message'] ?? e.message)
+          : e.message;
+      throw Exception((message ?? '请求 sauc_go 失败').toString());
+    }
   }
 
   static bool _canAddRank(Map i) {

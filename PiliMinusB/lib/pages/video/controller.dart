@@ -68,7 +68,6 @@ import 'package:extended_nested_scroll_view/extended_nested_scroll_view.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
-import 'package:flutter_volume_controller/flutter_volume_controller.dart';
 import 'package:get/get.dart';
 import 'package:hive/hive.dart';
 import 'package:media_kit/media_kit.dart';
@@ -503,8 +502,6 @@ class VideoDetailController extends GetxController
   @override
   Future<void> seekTo(Duration duration, {required bool isSeek}) =>
       plPlayerController.seekTo(duration, isSeek: isSeek);
-
-
 
   @override
   Widget buildItem(Object item, Animation<double> animation) {
@@ -1003,6 +1000,9 @@ class VideoDetailController extends GetxController
   late final RxBool showVP = true.obs;
   late final RxList<ViewPointSegment> viewPointList = <ViewPointSegment>[].obs;
 
+  String _subtitleErrorMessage(Object error) =>
+      error.toString().replaceFirst('Exception: ', '');
+
   // 设定字幕轨道
   Future<void> setSubtitle(int index) async {
     if (index <= 0) {
@@ -1031,13 +1031,33 @@ class VideoDetailController extends GetxController
     if (subtitle != null) {
       await setSub(subtitle);
     } else {
-      final result = await VideoHttp.vttSubtitles(
-        subtitles[index - 1].subtitleUrl!,
-      );
-      if (!isClosed && result != null) {
-        final subtitle = (isData: true, id: result);
-        vttSubtitles[index - 1] = subtitle;
-        await setSub(subtitle);
+      final sub = subtitles[index - 1];
+      final shouldShowLoading = sub.isLocal;
+      if (shouldShowLoading) {
+        SmartDialog.showLoading(msg: '正在转写字幕');
+      }
+      try {
+        final result = sub.isLocal
+            ? await VideoHttp.saucSubtitles(sub.transcriptionAudioUrl!)
+            : await VideoHttp.vttSubtitles(sub.subtitleUrl!);
+        if (!isClosed && result != null) {
+          final subtitle = (isData: true, id: result);
+          vttSubtitles[index - 1] = subtitle;
+          await setSub(subtitle);
+        } else if (!isClosed) {
+          SmartDialog.showToast('字幕加载失败');
+        }
+      } catch (e, s) {
+        if (kDebugMode) {
+          debugPrint('setSubtitle error: $e\n$s');
+        }
+        if (!isClosed) {
+          SmartDialog.showToast('字幕加载失败: ${_subtitleErrorMessage(e)}');
+        }
+      } finally {
+        if (shouldShowLoading) {
+          SmartDialog.dismiss(status: SmartStatus.loading);
+        }
       }
     }
   }
@@ -1071,6 +1091,29 @@ class VideoDetailController extends GetxController
   }
 
   late bool continuePlayingPart = Pref.continuePlayingPart;
+
+  Future<void> _loadLocalSubtitles() async {
+    final currentAudioUrl = audioUrl;
+    if (currentAudioUrl == null || currentAudioUrl.isEmpty) {
+      subtitles.clear();
+      return;
+    }
+
+    subtitles.value = [
+      Subtitle(
+        lan: 'local',
+        lanDoc: '本地转写',
+        isLocal: true,
+        transcriptionAudioUrl: currentAudioUrl,
+      ),
+    ];
+
+    final idx = switch (Pref.subtitlePreferenceV2) {
+      SubtitlePrefType.off => 0,
+      _ => 1,
+    };
+    await setSubtitle(idx);
+  }
 
   Future<void> _queryPlayInfo() async {
     vttSubtitles.clear();
@@ -1134,24 +1177,7 @@ class VideoDetailController extends GetxController
         } catch (_) {}
       }
 
-      if (response.subtitle?.subtitles?.isNotEmpty == true) {
-        subtitles.value = response.subtitle!.subtitles!;
-
-        final idx = switch (Pref.subtitlePreferenceV2) {
-          SubtitlePrefType.off => 0,
-          SubtitlePrefType.on => 1,
-          SubtitlePrefType.withoutAi =>
-            subtitles.first.lan.startsWith('ai') ? 0 : 1,
-          SubtitlePrefType.auto =>
-            !subtitles.first.lan.startsWith('ai') ||
-                    (PlatformUtils.isMobile &&
-                        (await FlutterVolumeController.getVolume() ?? 0.0) <=
-                            0.0)
-                ? 1
-                : 0,
-        };
-        await setSubtitle(idx);
-      }
+      await _loadLocalSubtitles();
     }
   }
 

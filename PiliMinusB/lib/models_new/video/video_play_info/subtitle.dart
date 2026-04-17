@@ -4,10 +4,17 @@ class Subtitle {
   String? subtitleUrl;
   String? subtitleUrlV2;
   bool isAi = false;
+  bool isLocal = false;
+  String? transcriptionAudioUrl;
 
   Subtitle({
     required this.lan,
     this.lanDoc,
+    this.subtitleUrl,
+    this.subtitleUrlV2,
+    this.isAi = false,
+    this.isLocal = false,
+    this.transcriptionAudioUrl,
   });
 
   Subtitle.fromJson(Map<String, dynamic> json) {
