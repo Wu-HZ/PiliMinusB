@@ -46,18 +46,6 @@ import 'package:flutter/foundation.dart' show compute;
 abstract final class VideoHttp {
   static RegExp zoneRegExp = RegExp(Pref.banWordForZone, caseSensitive: false);
   static bool enableFilter = zoneRegExp.pattern.isNotEmpty;
-  static final Dio _saucDio =
-      Dio(
-          BaseOptions(
-            baseUrl: HttpString.saucBaseUrl,
-            connectTimeout: const Duration(seconds: 15),
-            sendTimeout: const Duration(minutes: 10),
-            receiveTimeout: const Duration(hours: 2),
-          ),
-        )
-        ..options.validateStatus = (int? status) {
-          return status != null && status >= 200 && status < 300;
-        };
 
   // 首页推荐视频
   static Future<LoadingState<List<RecVideoItemModel>>> rcmdVideoList({
@@ -936,8 +924,8 @@ abstract final class VideoHttp {
     final audioBytes = await _downloadSubtitleAudioBytes(audioUri);
 
     try {
-      final res = await _saucDio.post<ResponseBody>(
-        '/transcribe',
+      final res = await SelfRequest.dio.post<ResponseBody>(
+        '/sauc/transcribe',
         queryParameters: const {
           'progressive': '1',
           'first_chunk_ms': '120000',
@@ -946,7 +934,11 @@ abstract final class VideoHttp {
         data: FormData.fromMap({
           'file': MultipartFile.fromBytes(audioBytes, filename: filename),
         }),
-        options: Options(responseType: ResponseType.stream),
+        options: Options(
+          responseType: ResponseType.stream,
+          sendTimeout: const Duration(minutes: 10),
+          receiveTimeout: const Duration(hours: 2),
+        ),
         cancelToken: cancelToken,
       );
       final body = res.data;

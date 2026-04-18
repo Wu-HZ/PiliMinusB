@@ -14,14 +14,19 @@ const ContextUserID = "user_id"
 
 func Auth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		header := c.GetHeader("Authorization")
-		if header == "" || !strings.HasPrefix(header, "Bearer ") {
+		var tokenStr string
+		if header := c.GetHeader("Authorization"); strings.HasPrefix(header, "Bearer ") {
+			tokenStr = strings.TrimPrefix(header, "Bearer ")
+		} else if q := c.Query("token"); q != "" {
+			// WebSocket handshakes can't set custom headers in browsers; accept
+			// the JWT via ?token=... as a fallback for WS endpoints like sauc.
+			tokenStr = q
+		} else {
 			response.Unauthorized(c, "missing or invalid Authorization header")
 			c.Abort()
 			return
 		}
 
-		tokenStr := strings.TrimPrefix(header, "Bearer ")
 		secret := config.Get().JWT.Secret
 
 		token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {

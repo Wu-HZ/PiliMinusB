@@ -15,5 +15,4 @@ abstract final class HttpString {
 
   // PiliMinusB 自建服务器地址
   static const String selfBaseUrl = 'http://127.0.0.1:8091';
-  static const String saucBaseUrl = 'http://127.0.0.1:8090';
 }

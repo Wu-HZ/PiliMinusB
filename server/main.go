@@ -11,6 +11,7 @@ import (
 	"piliminusb/handler"
 	"piliminusb/middleware"
 	"piliminusb/model"
+	saucsrv "piliminusb/sauc/server"
 )
 
 func main() {
@@ -105,6 +106,12 @@ func main() {
 		// Phase 5: Dynamics Feed
 		api.GET("/x/polymer/web-dynamic/v1/feed/all", handler.DynamicFeed)
 		api.GET("/x/polymer/web-dynamic/v1/portal", handler.DynamicPortal)
+
+		// sauc: subtitle / ASR service (merged from former sauc_go)
+		saucSvc := saucsrv.New(cfg.Sauc)
+		api.GET("/sauc/healthz", gin.WrapF(saucSvc.Healthz))
+		api.POST("/sauc/transcribe", gin.WrapF(saucSvc.Transcribe))
+		api.GET("/sauc/realtime/ws", gin.WrapF(saucSvc.RealtimeWS))
 	}
 
 	log.Printf("PiliMinusB server starting on :%s", cfg.Server.Port)
