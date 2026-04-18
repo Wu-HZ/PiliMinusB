@@ -665,6 +665,8 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
         () {
           if (videoDetailController.subtitles.isNotEmpty) {
             final val = videoDetailController.vttSubtitlesIndex.value;
+            final isLoading =
+                videoDetailController.isLocalSubtitleLoading.value;
             return PopupMenuButton<int>(
               tooltip: '字幕',
               requestFocus: false,
@@ -705,7 +707,17 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
               child: SizedBox(
                 width: widgetWidth,
                 height: 30,
-                child: val == 0
+                child: isLoading
+                    ? const Center(
+                        child: SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        ),
+                      )
+                    : val == 0
                     ? const Icon(
                         Icons.closed_caption_off_outlined,
                         size: 22,

@@ -998,6 +998,7 @@ class VideoDetailController extends GetxController
   RxList<Subtitle> subtitles = RxList<Subtitle>();
   final Map<int, ({bool isData, String id})> vttSubtitles = {};
   late final RxInt vttSubtitlesIndex = (-1).obs;
+  late final RxBool isLocalSubtitleLoading = false.obs;
   late final RxBool showVP = true.obs;
   late final RxList<ViewPointSegment> viewPointList = <ViewPointSegment>[].obs;
   CancelToken? _localSubtitleCancelToken;
@@ -1012,6 +1013,7 @@ class VideoDetailController extends GetxController
     if (clearPartial && pendingIndex != null) {
       vttSubtitles.remove(pendingIndex);
     }
+    isLocalSubtitleLoading.value = false;
     _pendingLocalSubtitleIndex = null;
     _localSubtitleRequestId++;
     _localSubtitleCancelToken?.cancel('subtitle cancelled');
@@ -1051,22 +1053,10 @@ class VideoDetailController extends GetxController
       await _applySubtitleTrack(index, subtitle);
     } else {
       final sub = subtitles[index - 1];
-      final shouldShowLoading = sub.isLocal;
-      var loadingVisible = false;
-      void dismissLoading() {
-        if (loadingVisible) {
-          SmartDialog.dismiss(status: SmartStatus.loading);
-          loadingVisible = false;
-        }
-      }
-
-      if (shouldShowLoading) {
-        SmartDialog.showLoading(msg: '正在转写字幕');
-        loadingVisible = true;
-      }
       try {
         String? result;
         if (sub.isLocal) {
+          isLocalSubtitleLoading.value = true;
           await plPlayerController.videoPlayerController?.setSubtitleTrack(
             SubtitleTrack.no(),
           );
@@ -1085,8 +1075,8 @@ class VideoDetailController extends GetxController
               }
               final subtitle = (isData: true, id: vtt);
               vttSubtitles[index - 1] = subtitle;
+              isLocalSubtitleLoading.value = false;
               await _applySubtitleTrack(index, subtitle);
-              dismissLoading();
               if (kDebugMode) {
                 debugPrint(
                   'local subtitle progress: $completedChunks/$totalChunks',
@@ -1130,7 +1120,7 @@ class VideoDetailController extends GetxController
           SmartDialog.showToast('字幕加载失败: ${_subtitleErrorMessage(e)}');
         }
       } finally {
-        dismissLoading();
+        isLocalSubtitleLoading.value = false;
       }
     }
   }
