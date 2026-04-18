@@ -19,12 +19,13 @@ import (
 // Service hosts the sauc HTTP handlers. It is constructed once and its methods
 // are registered onto the existing gin router in server/main.go.
 type Service struct {
-	wsURL           string
-	realtimeWSURL   string
-	segmentDuration int
-	nonstream       bool
-	timeout         time.Duration
-	realtimeTimeout time.Duration
+	wsURL                 string
+	realtimeWSURL         string
+	segmentDuration       int
+	nonstream             bool
+	timeout               time.Duration
+	realtimeTimeout       time.Duration
+	transcribeConcurrency int
 }
 
 type TranscribeResponse struct {
@@ -62,13 +63,18 @@ func New(cfg config.SaucConfig) *Service {
 	if realtimeWSURL == "" {
 		realtimeWSURL = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel"
 	}
+	concurrency := cfg.TranscribeConcurrency
+	if concurrency <= 0 {
+		concurrency = 3
+	}
 	return &Service{
-		wsURL:           wsURL,
-		realtimeWSURL:   realtimeWSURL,
-		segmentDuration: segmentDuration,
-		nonstream:       request.InferNonstream(wsURL),
-		timeout:         timeout,
-		realtimeTimeout: realtimeTimeout,
+		wsURL:                 wsURL,
+		realtimeWSURL:         realtimeWSURL,
+		segmentDuration:       segmentDuration,
+		nonstream:             request.InferNonstream(wsURL),
+		timeout:               timeout,
+		realtimeTimeout:       realtimeTimeout,
+		transcribeConcurrency: concurrency,
 	}
 }
 
@@ -89,16 +95,17 @@ func (s *Service) Transcribe(w http.ResponseWriter, r *http.Request) {
 	}
 	defer cleanup()
 	chunkDurationMS := parseChunkDurationMS(r)
-	firstChunkDurationMS := parseFirstChunkDurationMS(r, chunkDurationMS)
+	earlyScheduleMS := parseEarlyScheduleMS(r, chunkDurationMS)
 	if stat, statErr := os.Stat(filePath); statErr == nil {
 		log.Printf(
-			"received transcribe upload: filename=%s temp=%s size=%d progressive=%t first_chunk_ms=%d chunk_ms=%d",
+			"received transcribe upload: filename=%s temp=%s size=%d progressive=%t early_chunks_ms=%v chunk_ms=%d concurrency=%d",
 			fileName,
 			filePath,
 			stat.Size(),
 			isProgressiveTranscribe(r),
-			firstChunkDurationMS,
+			earlyScheduleMS,
 			chunkDurationMS,
+			s.transcribeConcurrency,
 		)
 	}
 
@@ -116,7 +123,7 @@ func (s *Service) Transcribe(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("X-Accel-Buffering", "no")
 
-		result, err := s.transcribeByChunks(ctx, filePath, firstChunkDurationMS, chunkDurationMS, func(event transcribeProgressEvent) error {
+		result, err := s.transcribeByChunks(ctx, filePath, earlyScheduleMS, chunkDurationMS, func(event transcribeProgressEvent) error {
 			event.Filename = fileName
 			return writeNDJSON(w, flusher, event)
 		})
@@ -139,7 +146,7 @@ func (s *Service) Transcribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := s.transcribeByChunks(ctx, filePath, firstChunkDurationMS, chunkDurationMS, nil)
+	result, err := s.transcribeByChunks(ctx, filePath, earlyScheduleMS, chunkDurationMS, nil)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: err.Error()})
 		return

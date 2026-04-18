@@ -30,13 +30,14 @@ type JWTConfig struct {
 }
 
 type SaucConfig struct {
-	AppKey             string `json:"app_key"`
-	AccessKey          string `json:"access_key"`
-	WSURL              string `json:"ws_url"`
-	RealtimeWSURL      string `json:"realtime_ws_url"`
-	SegmentDuration    int    `json:"seg_duration"`
-	TimeoutSec         int    `json:"timeout_sec"`
-	RealtimeTimeoutSec int    `json:"realtime_timeout_sec"`
+	AppKey                 string `json:"app_key"`
+	AccessKey              string `json:"access_key"`
+	WSURL                  string `json:"ws_url"`
+	RealtimeWSURL          string `json:"realtime_ws_url"`
+	SegmentDuration        int    `json:"seg_duration"`
+	TimeoutSec             int    `json:"timeout_sec"`
+	RealtimeTimeoutSec     int    `json:"realtime_timeout_sec"`
+	TranscribeConcurrency  int    `json:"transcribe_concurrency"`
 }
 
 // DSN returns the MySQL data source name.
@@ -56,11 +57,12 @@ func Get() *Config {
 			Database: DatabaseConfig{Host: "127.0.0.1", Port: "3306", User: "root", Password: "", DBName: "piliminusb"},
 			JWT:      JWTConfig{Secret: "change-me-to-a-random-secret"},
 			Sauc: SaucConfig{
-				WSURL:              "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream",
-				RealtimeWSURL:      "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel",
-				SegmentDuration:    200,
-				TimeoutSec:         7200,
-				RealtimeTimeoutSec: 1800,
+				WSURL:                 "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream",
+				RealtimeWSURL:         "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel",
+				SegmentDuration:       200,
+				TimeoutSec:            7200,
+				RealtimeTimeoutSec:    1800,
+				TranscribeConcurrency: 3,
 			},
 		}
 		data, err := os.ReadFile("config.json")

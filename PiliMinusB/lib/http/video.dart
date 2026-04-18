@@ -928,7 +928,7 @@ abstract final class VideoHttp {
         '/sauc/transcribe',
         queryParameters: const {
           'progressive': '1',
-          'first_chunk_ms': '120000',
+          'early_chunks_ms': '120000,120000',
           'chunk_ms': '300000',
         },
         data: FormData.fromMap({
