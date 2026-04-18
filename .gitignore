@@ -1,5 +1,7 @@
 # Server
+server/piliminusb
 server/piliminusb.exe
+server/piliminusb-*
 server/config.json
 
 # Go
